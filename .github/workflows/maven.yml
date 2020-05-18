@@ -29,9 +29,9 @@ jobs:
         server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
         settings-path: ${{ github.workspace }}
     - name: Build core with Maven
-      run: mvn -X -B install --file core/pom.xml
+      run: mvn -DskipTests -B install --file core/pom.xml
     - name: Build rest with Maven
-      run: mvn -X -B package --file rest/pom.xml
+      run: mvn -B package --file rest/pom.xml
       
       env:
         GITHUB_TOKEN: ${{ github.token }}
