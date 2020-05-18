@@ -1,6 +1,9 @@
-### isaac-rest-api 
+### knowledge-rest-api 
+============================
 
-Simplified ISAAC APIs for REST access
+![Knowledge Rest Snapshot Build](https://github.com/mindcomputing/knowledge-rest-api/workflows/Knowledge%20Rest%20Snapshot%20Build/badge.svg)
+
+Simplified APIs for REST access to solor.io data models.
 
 ### Support:
 This implementation is provided and supported by Mind Computing in combination with Sagebits LLC.
