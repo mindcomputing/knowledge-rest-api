@@ -40,12 +40,14 @@ import net.sagebits.tmp.isaac.rest.api1.data.mapping.RestMappingItemVersion;
 import net.sagebits.tmp.isaac.rest.api1.data.mapping.RestMappingSetDisplayField;
 import net.sagebits.tmp.isaac.rest.api1.data.mapping.RestMappingSetDisplayFieldCreate;
 import net.sagebits.tmp.isaac.rest.api1.data.mapping.RestMappingSetVersion;
+import net.sagebits.tmp.isaac.rest.api1.data.qa.RestQAResult;
 import net.sagebits.tmp.isaac.rest.api1.data.semantic.RestSemanticDescriptionVersion;
 //import net.sagebits.tmp.isaac.rest.api1.data.workflow.RestWorkflowAvailableAction;
 //import net.sagebits.tmp.isaac.rest.api1.data.workflow.RestWorkflowDefinition;
 //import net.sagebits.tmp.isaac.rest.api1.data.workflow.RestWorkflowProcess;
 //import net.sagebits.tmp.isaac.rest.api1.data.workflow.RestWorkflowProcessHistoriesMapEntry;
 //import net.sagebits.tmp.isaac.rest.api1.data.workflow.RestWorkflowProcessHistory;
+import net.sagebits.tmp.isaac.rest.api1.data.semantic.RestSemanticVersion;
 
 /**
  * {@link ArrayUnwrappers}
@@ -250,6 +252,32 @@ public class ArrayUnwrappers
 		public Object[] getValues()
 		{
 			return restConceptChronology;
+		}
+	}
+	
+	@XmlRootElement
+	public static class RestSemanticVersions implements ArrayUnwrapper
+	{
+		@XmlElement
+		protected RestSemanticVersion[] restSemanticVersion;
+
+		@Override
+		public Object[] getValues()
+		{
+			return restSemanticVersion;
+		}
+	}
+	
+	@XmlRootElement
+	public static class RestQAResults implements ArrayUnwrapper
+	{
+		@XmlElement
+		protected RestQAResult[] restQAResult;
+
+		@Override
+		public Object[] getValues()
+		{
+			return restQAResult;
 		}
 	}
 }

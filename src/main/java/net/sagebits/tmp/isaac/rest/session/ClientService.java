@@ -36,6 +36,7 @@ import javax.inject.Singleton;
 import javax.ws.rs.client.Client;
 import javax.ws.rs.client.ClientBuilder;
 import org.glassfish.hk2.api.Rank;
+import org.glassfish.jersey.client.ClientProperties;
 import org.jvnet.hk2.annotations.Service;
 
 /**
@@ -58,13 +59,19 @@ public class ClientService
 
 	public Client getClient()
 	{
-		return client_ != null ? client_ : ClientBuilder.newClient();
+		if (client_ == null)
+		{
+			startup();
+		}
+		return client_;
 	}
 
 	@PostConstruct
 	void startup()
 	{
 		client_ = ClientBuilder.newClient();
+		client_.property(ClientProperties.CONNECT_TIMEOUT, 5000);
+		client_.property(ClientProperties.READ_TIMEOUT, 5000);
 	}
 
 	@PreDestroy

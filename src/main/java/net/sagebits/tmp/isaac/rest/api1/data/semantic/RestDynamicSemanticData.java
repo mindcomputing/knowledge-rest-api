@@ -34,6 +34,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
+import java.util.OptionalDouble;
+import java.util.OptionalInt;
+import java.util.OptionalLong;
+import java.util.UUID;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import javax.xml.bind.annotation.XmlSeeAlso;
@@ -52,7 +57,10 @@ import net.sagebits.tmp.isaac.rest.api1.data.semantic.dataTypes.RestDynamicSeman
 import net.sagebits.tmp.isaac.rest.api1.data.semantic.dataTypes.RestDynamicSemanticNid;
 import net.sagebits.tmp.isaac.rest.api1.data.semantic.dataTypes.RestDynamicSemanticString;
 import net.sagebits.tmp.isaac.rest.api1.data.semantic.dataTypes.RestDynamicSemanticUUID;
+import sh.isaac.api.component.semantic.version.dynamic.DynamicColumnInfo;
 import sh.isaac.api.component.semantic.version.dynamic.DynamicData;
+import sh.isaac.api.component.semantic.version.dynamic.DynamicDataType;
+import sh.isaac.api.component.semantic.version.dynamic.DynamicUsageDescription;
 import sh.isaac.api.component.semantic.version.dynamic.types.DynamicArray;
 import sh.isaac.api.component.semantic.version.dynamic.types.DynamicBoolean;
 import sh.isaac.api.component.semantic.version.dynamic.types.DynamicByteArray;
@@ -63,6 +71,8 @@ import sh.isaac.api.component.semantic.version.dynamic.types.DynamicLong;
 import sh.isaac.api.component.semantic.version.dynamic.types.DynamicNid;
 import sh.isaac.api.component.semantic.version.dynamic.types.DynamicString;
 import sh.isaac.api.component.semantic.version.dynamic.types.DynamicUUID;
+import sh.isaac.api.util.NumericUtils;
+import sh.isaac.api.util.UUIDUtil;
 import sh.isaac.model.semantic.types.DynamicArrayImpl;
 import sh.isaac.model.semantic.types.DynamicBooleanImpl;
 import sh.isaac.model.semantic.types.DynamicByteArrayImpl;
@@ -217,7 +227,7 @@ public abstract class RestDynamicSemanticData
 	 */
 	public static DynamicData[] translate(RestDynamicSemanticData[] values) throws RestException
 	{
-		return translate(values, false);
+		return translate(values, false, null);
 	}
 
 	/**
@@ -227,10 +237,13 @@ public abstract class RestDynamicSemanticData
 	 * 
 	 * @param values
 	 * @param nullPadGaps
+	 * @param dud - optional - if provided, also checks that the types are correct, per the column definition, and does some automatic corrections, 
+	 *   in the cases where a string was passed in, but it can be safely translated to the correct type - such as boolean or integer.  If not provided, 
+	 *   no checking / correcting of types is performed.  Will also replace string value concepts which are blank, with nulls, if the column is optional.
 	 * @return the data
 	 * @throws RestException
 	 */
-	public static DynamicData[] translate(RestDynamicSemanticData[] values, boolean nullPadGaps) throws RestException
+	public static DynamicData[] translate(RestDynamicSemanticData[] values, boolean nullPadGaps, DynamicUsageDescription dud) throws RestException
 	{
 		if (values == null)
 		{
@@ -263,7 +276,103 @@ public abstract class RestDynamicSemanticData
 				result.add(RestDynamicSemanticData.translate(rdsd));
 			}
 		}
+		if (dud != null)
+		{
+			for (int i = 0; i < result.size(); i++)
+			{
+				DynamicColumnInfo expected = dud.getColumnInfo()[i];
+				if (result.get(i) != null)
+				{
+					//Null them out if possible first, to get rid of the empty string fields.
+					if (!expected.isColumnRequired())
+					{
+						result.set(i, nullIfPossible(result.get(i)));
+					}
+					//See if any passed in strings should have been a different data type - sometimes 
+					//we get lossy types in the rest calls...
+					if (result.get(i) != null && expected.getColumnDataType() != result.get(i).getDynamicDataType())
+					{
+						result.set(i, adjustTypeIfPossible(result.get(i), expected.getColumnDataType()));
+					}
+				}
+			}
+		}
 		return result.toArray(new DynamicData[result.size()]);
+	}
+
+	private static DynamicData nullIfPossible(DynamicData dynamicData)
+	{
+		if (dynamicData.getData() == null)
+		{
+			return null;
+		}
+		if (dynamicData.getDynamicDataType() == DynamicDataType.STRING && ((DynamicString)dynamicData).getDataString().length() == 0)
+		{
+			return null;
+		}
+		else if (dynamicData.getDynamicDataType() == DynamicDataType.ARRAY && ((DynamicArray<?>)dynamicData).getDataArray().length == 0)
+		{
+			return null;
+		}
+		return dynamicData;
+	}
+
+	private static DynamicData adjustTypeIfPossible(DynamicData dynamicData, DynamicDataType expectedType)
+	{
+		if (dynamicData == null || dynamicData.getDynamicDataType() == expectedType)
+		{
+			return dynamicData;
+		}
+		
+		String passedValue = dynamicData.dataToString().toLowerCase().trim();
+		switch(expectedType)
+		{
+			case BOOLEAN:
+			{
+				if (passedValue.equals("true") || passedValue.equals("false"))
+				{
+					return new DynamicBooleanImpl(Boolean.parseBoolean(passedValue));
+				}
+			}
+			case DOUBLE:
+			{
+				OptionalDouble od = NumericUtils.getDouble(passedValue);
+				return od.isPresent() ? new DynamicDoubleImpl(od.getAsDouble()) : dynamicData;
+			}
+			case FLOAT:
+			{
+				Optional<Float> of = NumericUtils.getFloat(passedValue);
+				return of.isPresent() ? new DynamicFloatImpl(of.get().floatValue()) : dynamicData;
+			}
+			case INTEGER:
+			case NID:
+			{
+				OptionalInt oi = NumericUtils.getInt(passedValue);
+				return oi.isPresent() ? (expectedType == DynamicDataType.NID ? new DynamicNidImpl(oi.getAsInt()) : new DynamicIntegerImpl(oi.getAsInt())) : dynamicData;
+			}
+			case LONG:
+			{
+				OptionalLong ol = NumericUtils.getLong(passedValue);
+				return ol.isPresent() ? new DynamicLongImpl(ol.getAsLong()) : dynamicData;
+			}
+			case STRING:
+			{
+				return new DynamicStringImpl(passedValue);
+			}
+			case UUID:
+			{
+				Optional<UUID> uuid = UUIDUtil.getUUID(passedValue);
+				return uuid.isPresent() ? new DynamicUUIDImpl(uuid.get()) : dynamicData;
+			}
+			case ARRAY:
+			case UNKNOWN:
+			case POLYMORPHIC:
+			case BYTEARRAY:
+			default :
+				//Can't do anything with these, it should fail later, during validate on write.
+				return dynamicData;
+			
+		}
 	}
 
 	public static void sort(RestDynamicSemanticData[] values) throws RestException

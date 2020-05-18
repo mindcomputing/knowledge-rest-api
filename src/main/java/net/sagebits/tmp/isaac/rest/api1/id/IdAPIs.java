@@ -63,6 +63,7 @@ import net.sagebits.tmp.isaac.rest.session.RequestInfo;
 import net.sagebits.tmp.isaac.rest.session.RequestParameters;
 import net.sagebits.uts.auth.data.UserRole.SystemRoleConstants;
 import sh.isaac.MetaData;
+import sh.isaac.api.AssemblageService;
 import sh.isaac.api.ConceptProxy;
 import sh.isaac.api.Get;
 import sh.isaac.api.bootstrap.TermAux;
@@ -245,7 +246,9 @@ public class IdAPIs
 	 * NOTE: For the convenient use of ids as labels, the descriptionTypePrefs is unconditionally overridden to the value of
 	 * "REGULAR,FQN"
 	 * 
-	 * This returns a subset of idTypes contained in the /types call - only the ones that are stored via a semantic.
+	 * This returns a subset of idTypes contained in the /types call - only the ones that are designated via a semantic membership.
+	 * @param inUse if true, only return ids that are have at least one usage in the system (active or inactive).  If false or missing, 
+	 *     returns all ids that are designated via semantic membership
 	 * 
 	 * @return RestConceptChronology[] - Array of {@link RestConceptChronology} representing identifier static string semantic concepts
 	 * @throws RestException
@@ -253,14 +256,16 @@ public class IdAPIs
 	@GET
 	@Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
 	@Path(RestPaths.idsComponent)
-	public RestConceptChronology[] getSupportedIdConcepts() throws RestException
+	public RestConceptChronology[] getSupportedIdConcepts(@QueryParam(RequestParameters.inUse) @DefaultValue("false") String inUse) throws RestException
 	{
-		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.COORDINATE_PARAM_NAMES);
+		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.COORDINATE_PARAM_NAMES, RequestParameters.inUse);
 		
 		Set<ConceptChronology> identifierAnnotatedConcepts = new HashSet<>();
+		
+		boolean inUseB = Boolean.parseBoolean(inUse.trim());
 
-		Stream<SemanticChronology> identifierAnnotationSemanticChronologyStream = Get.assemblageService()
-				.getSemanticChronologyStream(MetaData.IDENTIFIER_SOURCE____SOLOR.getNid());
+		AssemblageService as = Get.assemblageService();
+		Stream<SemanticChronology> identifierAnnotationSemanticChronologyStream = as.getSemanticChronologyStream(MetaData.IDENTIFIER_SOURCE____SOLOR.getNid());
 		identifierAnnotationSemanticChronologyStream.sequential().forEach(identifierAnnotationSemanticChronology -> {
 			LatestVersion<SemanticVersion> identifierAnnotationSemanticLatestOptional = identifierAnnotationSemanticChronology
 					.getLatestVersion(RequestInfo.get().getStampCoordinate());
@@ -268,7 +273,12 @@ public class IdAPIs
 			{
 				Util.logContradictions(log, identifierAnnotationSemanticLatestOptional);
 				SemanticVersion identifierAnnotationSemantic = identifierAnnotationSemanticLatestOptional.get();
-				identifierAnnotatedConcepts.add(Get.conceptService().getConceptChronology(identifierAnnotationSemantic.getReferencedComponentNid()));
+				int idNid = identifierAnnotationSemantic.getReferencedComponentNid();
+				
+				if (!inUseB || as.getSemanticChronologyStream(idNid).findFirst().isPresent())
+				{
+					identifierAnnotatedConcepts.add(Get.conceptService().getConceptChronology(idNid));
+				}
 			}
 		});
 
@@ -293,6 +303,7 @@ public class IdAPIs
 	}
 	private final static Comparator<RestConceptChronology> REST_CONCEPT_DESCRIPTION_COMPARATOR = new Comparator<RestConceptChronology>()
 	{
+		@Override
 		public int compare(RestConceptChronology concept1, RestConceptChronology concept2)
 		{
 

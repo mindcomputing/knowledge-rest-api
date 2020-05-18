@@ -133,4 +133,16 @@ public class RestUser
 			this.effectiveRoles.add(new RestUserRoleType(ur));
 		}
 	}
+
+	@Override
+	public String toString()
+	{
+		if (User.ANON_READ_ID.equals(userId))
+		{
+			return "Anonymous user";
+		}
+		return "Username: " + userName + "displayName: " + displayName + " email: " + email + "id: " + userId.toString();
+	}
+	
+	
 }

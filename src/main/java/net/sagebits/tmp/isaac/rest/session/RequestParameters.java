@@ -145,6 +145,7 @@ public class RequestParameters {
 	public final static Set<String> PAGINATION_PARAM_NAMES = unmodifiableSet(pageNum, maxPageSize);
 	
 	public final static String assemblage = "assemblage";
+	public final static String skipAssemblage = "skipAssemblage";
 	public final static String includeDescriptions = "includeDescriptions";
 	public final static String includeAssociations = "includeAssociations";
 	public final static String includeMappings = "includeMappings";
@@ -153,6 +154,7 @@ public class RequestParameters {
 	public final static String includeAllVersions = "includeAllVersions";
 
 	public final static String query = "query";
+	public final static String applyStampToConcept = "applyStampToConcept";
 	public final static String treatAsString = "treatAsString";
 	public final static String descriptionTypes = "descriptionTypes";
 	public final static String extendedDescriptionTypes = "extendedDescriptionTypes";
@@ -179,6 +181,7 @@ public class RequestParameters {
 	public final static String inputType = "inputType";
 	public final static String outputType = "outputType";
 	public final static String altId = "altId";
+	public final static String inUse = "inUse";
 
 	// Workflow
 //	public final static String definitionId = "definitionId"; // UUID string
@@ -202,6 +205,23 @@ public class RequestParameters {
 	//export
 	public final static String changedAfter = "changedAfter";
 	public final static String changedBefore = "changedBefore";
+	public final static String publish = "publish";
+	
+	//sctids
+	public final static String namespace = "namespace";
+	
+	//release
+	public final static String targetModule = "targetModule";
+	public final static String commitTime = "commitTime";
+	
+	public final static String releaseDate = "releaseDate";
+	public final static String releaseTime = "releaseTime";
+	public final static String releaseTimeZone = "releaseTimeZone";
+	public final static String versionDate = "versionDate";
+	public final static String solorRF2 = "solorRF2";
+	public final static String exportType = "exportType";
+	public final static String classify = "classify";
+	public final static String qa = "qa";
 	
 	public final static String field = "field";
 	
@@ -227,8 +247,10 @@ public class RequestParameters {
 	
 	
 	//classification
+	public final static String defaultCoordinates = "defaultCoordinates";
 	public final static String defaultModule = "defaultModule";
 	public final static String largeResults = "largeResults";
+	public final static String skipResults = "skipResults";
 	
 	
 	//IBDF import
@@ -258,6 +280,7 @@ public class RequestParameters {
 			includeAllVersions,
 
 			query,
+			applyStampToConcept,
 			treatAsString,
 			descriptionTypes,
 			extendedDescriptionTypes,
@@ -281,6 +304,7 @@ public class RequestParameters {
 			inputType,
 			outputType,
 			altId,
+			inUse,
 			
 			active,
 			
@@ -301,13 +325,27 @@ public class RequestParameters {
 			vuidGeneration,
 			
 			fqn,
+			defaultCoordinates,
 			defaultModule,
 			largeResults,
 			parentConceptId, 
 			
 			groupId, 
 			artifactId, 
-			version
+			version,
+			
+			changedAfter,
+			changedBefore,
+			publish,
+			namespace,
+			targetModule,
+			commitTime,
+			releaseDate,
+			releaseTime,
+			releaseTimeZone,
+			versionDate,
+			solorRF2,
+			exportType
 			
 			));
 		ALL_VALID_PARAMETERS = params;
@@ -366,10 +404,10 @@ public class RequestParameters {
 		
 		//All calls support these, to allow auth
 		supportedParameterNamesSet.add(AuthRequestParameters.ssoToken);
+		supportedParameterNamesSet.add(AuthRequestParameters.serviceToken);
 		supportedParameterNamesSet.add(AuthRequestParameters.userName);
 		supportedParameterNamesSet.add(AuthRequestParameters.email);
 		supportedParameterNamesSet.add(AuthRequestParameters.password);
-		supportedParameterNamesSet.add(AuthRequestParameters.googleToken);
 		
 		for (String parameterName : parameters.keySet())
 		{

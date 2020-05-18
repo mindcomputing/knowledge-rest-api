@@ -52,6 +52,7 @@ import org.testng.Assert;
 import org.testng.annotations.Test;
 import org.w3c.dom.Node;
 import org.w3c.dom.NodeList;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.sagebits.tmp.isaac.rest.ExpandUtil;
@@ -74,6 +75,7 @@ import net.sagebits.tmp.isaac.rest.api1.data.query.RestQueryResultPage;
 import net.sagebits.tmp.isaac.rest.api1.data.search.RestSearchResult;
 import net.sagebits.tmp.isaac.rest.api1.data.search.RestSearchResultPage;
 import net.sagebits.tmp.isaac.rest.api1.data.semantic.RestDynamicSemanticData;
+import net.sagebits.tmp.isaac.rest.api1.data.semantic.RestDynamicSemanticDefinitionPage;
 import net.sagebits.tmp.isaac.rest.api1.data.semantic.RestDynamicSemanticVersion;
 import net.sagebits.tmp.isaac.rest.api1.data.semantic.RestSemanticDescriptionVersion;
 import net.sagebits.tmp.isaac.rest.api1.data.semantic.RestSemanticLogicGraphVersion;
@@ -603,8 +605,9 @@ public class ReadOnlyRestTest extends BaseTestCode
 		Assert.assertFalse(result.contains(DynamicConstants.get().DYNAMIC_ASSEMBLAGES.getPrimordialUuid().toString()), "looked in " + result);
 
 		result = checkFail(target(byRefSearchRequestPath).queryParam(RequestParameters.nid, MetaData.METADATA____SOLOR.getNid())
-				.queryParam(RequestParameters.maxPageSize, "100").queryParam(RequestParameters.expand, "uuid," + ExpandUtil.referencedConcept).request()
-				.header(ACCEPT, MediaType.APPLICATION_JSON).get()).readEntity(String.class);
+				.queryParam(RequestParameters.maxPageSize, "100").queryParam(RequestParameters.expand, 
+						ExpandUtil.referencedConcept + "," + ExpandUtil.referencedConcept + "," + ExpandUtil.terminologyType)
+				.request().header(ACCEPT, MediaType.APPLICATION_JSON).get()).readEntity(String.class);
 		Assert.assertTrue(result.contains(MetaData.METADATA_MODULES____SOLOR.getPrimordialUuid().toString()), "looked in " + result);
 
 		result = checkFail(target(byRefSearchRequestPath).queryParam(RequestParameters.nid, MetaData.METADATA____SOLOR.getNid())
@@ -674,7 +677,6 @@ public class ReadOnlyRestTest extends BaseTestCode
 		String result = checkFail(target(conceptDescriptionsRequestPath + MetaData.USER____SOLOR.getNid()).request()
 				.header(ACCEPT, MediaType.APPLICATION_XML).get()).readEntity(String.class);
 
-		// TODO change this to use objects instead of regular expression matching
 		String[] temp = result.split("<restSemanticDescriptionVersion>");
 		// [0] is header junk
 		// [1] is the first dialect
@@ -1645,4 +1647,86 @@ public class ReadOnlyRestTest extends BaseTestCode
 		}
 		Assert.assertEquals(page, expectedResult);
 	}
+	
+	
+	@Test
+	public void testSemanticListFunctions() throws JsonProcessingException, IOException
+	{
+		String result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "200").request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		RestDynamicSemanticDefinitionPage semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+
+		Assert.assertEquals(semanticDefinitions.getResults().length, 67, "Unexpected number of semantics");
+		
+		Assert.assertEquals(semanticDefinitions.getPaginationData().approximateTotal, 67, "Unexpected number of semantics");
+		Assert.assertTrue(semanticDefinitions.getPaginationData().totalIsExact);
+		
+		//test sort
+		result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "10").queryParam(RequestParameters.sortFull, true).request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+		Assert.assertEquals(semanticDefinitions.getResults()[0].assemblageConceptId.nid.intValue(), MetaData.AUTOMATION_ISSUE_ASSEMBLAGE____SOLOR.getNid(), 
+				"Not sorted correctly");
+		Assert.assertEquals(semanticDefinitions.getResults()[9].assemblageConceptId.nid.intValue(), MetaData.CVX_CODE____SOLOR.getNid(), 
+				"Not sorted correctly");
+		
+		//test restrict
+		result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "200").queryParam(RequestParameters.restrictTo, "refset").request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+		Assert.assertEquals(semanticDefinitions.getResults().length, 5, "Unexpected number of semantics");
+		
+		result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "200").queryParam(RequestParameters.restrictTo, "property").request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+		Assert.assertEquals(semanticDefinitions.getResults().length, 48, "Unexpected number of semantics");
+		
+		result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "200").queryParam(RequestParameters.restrictTo, "property,refset").request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+		Assert.assertEquals(semanticDefinitions.getResults().length, 67, "Unexpected number of semantics");
+		
+		result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "200").queryParam(RequestParameters.restrictTo, "association").request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+		Assert.assertEquals(semanticDefinitions.getResults().length, 1, "Unexpected number of semantics");
+		
+		result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "200").queryParam(RequestParameters.restrictTo, "mapset").request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+		Assert.assertNull(semanticDefinitions.getResults(), "Unexpected number of semantics");
+		
+		result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "200").queryParam(RequestParameters.restrictTo, "refset,mapset,association").request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+		Assert.assertEquals(semanticDefinitions.getResults().length, 6, "Unexpected number of semantics");
+		
+		result = checkFail(target(RestPaths.semanticAPIsPathComponent + RestPaths.semanticDefinitionsComponent)
+				.queryParam(RequestParameters.maxPageSize, "200").queryParam(RequestParameters.sortFull, true)
+				.queryParam(RequestParameters.restrictTo, "refset,mapset,association,property").request().header(ACCEPT, MediaType.APPLICATION_XML).get())
+				.readEntity(String.class);
+
+		semanticDefinitions = XMLUtils.unmarshalObject(RestDynamicSemanticDefinitionPage.class, result);
+		Assert.assertEquals(semanticDefinitions.getResults().length, 67, "Unexpected number of semantics");
+		
+		Assert.assertEquals(semanticDefinitions.getResults()[0].assemblageConceptId.nid.intValue(), MetaData.AUTOMATION_ISSUE_ASSEMBLAGE____SOLOR.getNid(), 
+				"Not sorted correctly");
+	}
+	
 }

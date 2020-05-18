@@ -55,11 +55,12 @@ public class AuthRequestParameters
 		//prevent construction
 	}
 
+	public final static String serviceToken = "serviceToken";
 	public final static String ssoToken = "ssoToken";
 	public final static String userName = "userName";
 	public final static String email = "email";
 	public final static String password = "password";
-	public final static String googleToken = "googleToken";
+	public final static String oauthToken = "oauthToken";
 	public final static String dbUUID = "dbUUID";
 
 	/**
@@ -69,7 +70,7 @@ public class AuthRequestParameters
 	static
 	{
 		Set<String> params = new HashSet<>();
-		params.addAll(unmodifiableSet(ssoToken, userName, email, password, googleToken, dbUUID));
+		params.addAll(unmodifiableSet(serviceToken, ssoToken, userName, email, password, oauthToken, dbUUID));
 		ALL_VALID_PARAMETERS = params;
 	}
 

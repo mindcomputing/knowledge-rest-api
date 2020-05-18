@@ -21,6 +21,7 @@ import java.io.FileNotFoundException;
 import java.nio.file.Paths;
 import java.util.concurrent.ExecutionException;
 import javax.ws.rs.core.Application;
+import org.apache.commons.io.FileUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.glassfish.jersey.server.ResourceConfig;
@@ -31,6 +32,7 @@ import org.testng.annotations.BeforeClass;
 import org.testng.annotations.Test;
 import net.sagebits.tmp.isaac.rest.ApplicationConfig;
 import net.sagebits.tmp.isaac.rest.LocalServerRunner;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.uts.auth.data.User;
 import net.sagebits.uts.auth.data.UserRole;
 import net.sagebits.uts.auth.users.UserService;
@@ -92,7 +94,9 @@ public class ConfigureServerForTest extends JerseyTestNg.ContainerPerClassTest
 				Thread.sleep(50);
 			}
 
-			userStoreFile = new File(new File(System.getProperty("java.io.tmpdir")), "rest-test-users.json");
+			File tempDirName = new File(System.getProperty("java.io.tmpdir"));
+			userStoreFile = new File(tempDirName, "auth-users-rest-test");  //Align this with the default path the RestUserServiceLocal makes.
+			userStoreFile.mkdirs();
 			
 			//Create a user service, make sure these users are in it, then toss it.  They will get read again when the RestUserServiceLocal starts
 			UserService us = new UserService(userStoreFile, false);
@@ -111,16 +115,17 @@ public class ConfigureServerForTest extends JerseyTestNg.ContainerPerClassTest
 			});
 			commitService.postProcessImportNoChecks();
 
-			Get.startIndexTask((Class<IndexBuilderService>[]) null).get();
-
 			createVHATHasParentAssociation();
+			
+			Get.startIndexTask((Class<IndexBuilderService>[]) null).get();
+			
 			BaseTestCode.configure(this);
 		}
 		catch (FileNotFoundException | InterruptedException | ExecutionException e)
 		{
 			Assert.fail("Test data file not found", e);
 		}
-		Assert.assertEquals(Get.conceptDescriptionText(MetaData.ASSEMBLAGE____SOLOR.getNid()), "Assemblage (SOLOR)");
+		Assert.assertEquals(Util.readBestDescription(MetaData.ASSEMBLAGE____SOLOR.getNid()), "Assemblage (SOLOR)");
 	}
 	
 	// VHAT-specific metadata
@@ -151,8 +156,7 @@ public class ConfigureServerForTest extends JerseyTestNg.ContainerPerClassTest
 	{
 		log.info("realShutDown executing, which will stop isaac");
 		super.tearDown();
-		userStoreFile.delete();
-		new File(userStoreFile.getAbsolutePath() + ".bak").delete();
+		FileUtils.deleteDirectory(userStoreFile);
 		new File(new File(System.getProperty("java.io.tmpdir")), "rest-test-tokenSecret").delete();
 	}
 }

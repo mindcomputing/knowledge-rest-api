@@ -36,11 +36,18 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
+import net.sagebits.tmp.isaac.rest.api1.data.RestStampedVersion;
 import net.sagebits.tmp.isaac.rest.api1.data.enumerations.RestObjectChronologyType;
+import net.sagebits.tmp.isaac.rest.api1.data.enumerations.RestSemanticStyle;
 import net.sagebits.tmp.isaac.rest.api1.data.enumerations.RestSemanticType;
+import net.sagebits.tmp.isaac.rest.api1.semantic.SemanticAPIs;
+import net.sagebits.tmp.isaac.rest.session.RequestInfo;
+import sh.isaac.api.Get;
+import sh.isaac.api.Status;
 import sh.isaac.api.component.semantic.version.dynamic.DynamicColumnInfo;
 import sh.isaac.api.component.semantic.version.dynamic.DynamicUsageDescription;
 import sh.isaac.api.externalizable.IsaacObjectType;
+import sh.isaac.api.util.AlphanumComparator;
 
 /**
  * 
@@ -50,7 +57,7 @@ import sh.isaac.api.externalizable.IsaacObjectType;
  */
 @XmlRootElement
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY)
-public class RestDynamicSemanticDefinition
+public class RestDynamicSemanticDefinition implements Comparable<RestDynamicSemanticDefinition>
 {
 	protected RestDynamicSemanticDefinition()
 	{
@@ -60,6 +67,10 @@ public class RestDynamicSemanticDefinition
 	public RestDynamicSemanticDefinition(DynamicUsageDescription dsud)
 	{
 		this.assemblageConceptId = new RestIdentifiedObject(dsud.getDynamicUsageDescriptorNid(), IsaacObjectType.CONCEPT);
+		//Using any state / all modules here, to give us the best chance of finding this.  We don't support having variations of a semantic 
+		//definition on different modules anyway.
+		this.assemblageConceptVersion = new RestStampedVersion(Get.conceptService().getConceptChronology(dsud.getDynamicUsageDescriptorNid())
+				.getLatestVersion(RequestInfo.get().getStampCoordinate().makeCoordinateAnalog(Status.ANY_STATUS_SET).makeModuleAnalog(null, false)).get());
 		this.assemblageConceptDescription = Util.readBestDescription(this.assemblageConceptId.nid);
 		this.semanticUsageDescription = dsud.getDynamicUsageDescription();
 		this.referencedComponentTypeRestriction = dsud.getReferencedComponentTypeRestriction() == null ? null
@@ -72,15 +83,23 @@ public class RestDynamicSemanticDefinition
 		{
 			this.columnInfo[i++] = new RestDynamicSemanticColumnInfo(dsci);
 		}
+		this.semanticStyle = new RestSemanticStyle(SemanticAPIs.getSemanticStyle(this.assemblageConceptId.nid));
 	}
 
 	/**
-	 * The concept nio of the concept that is used as an assemblage. The rest of the descriptive details of the
+	 * The concept info of the concept that is used as an assemblage. The rest of the descriptive details of the
 	 * semantic assemblage (returned in this object) are read from this concept.
 	 */
 	@XmlElement
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public RestIdentifiedObject assemblageConceptId;
+
+	/**
+	 * The STAMP information of the version of the assemblageConceptId read to populate this object. 
+	 */
+	@XmlElement
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	public RestStampedVersion assemblageConceptVersion;
 
 	/**
 	 * The "best" description for the concept identified by the assemblageConceptId. This is selected based on the attributes within the session for
@@ -130,4 +149,20 @@ public class RestDynamicSemanticDefinition
 	@XmlElement
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	public RestSemanticType referencedComponentTypeSubRestriction;
+	
+	/**
+	 * The general style of the semantic.
+	 */
+	@XmlElement
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	RestSemanticStyle semanticStyle;
+	
+	/**
+	 * @see java.lang.Comparable#compareTo(java.lang.Object)
+	 */
+	@Override
+	public int compareTo(RestDynamicSemanticDefinition o)
+	{
+		return AlphanumComparator.compare(assemblageConceptDescription, o.assemblageConceptDescription, true);
+	}
 }

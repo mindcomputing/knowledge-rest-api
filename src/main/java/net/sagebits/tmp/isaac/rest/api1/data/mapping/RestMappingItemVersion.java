@@ -107,11 +107,11 @@ public class RestMappingItemVersion extends RestMappingItemVersionBase
 	public RestIdentifiedObject targetConcept;
 
 	/**
-	 * An (optional) concept used to qualify this mapping entry.
+	 * An (optional) concept used to specify the equivalence of this mapping entry.
 	 */
 	@XmlElement
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	public RestIdentifiedObject qualifierConcept; // TODO rename this to equivalenceTypeConcept
+	public RestIdentifiedObject equivalenceTypeConcept;
 
 	/**
 	 * The identifier data for the semantic that represents this mapping item
@@ -148,7 +148,7 @@ public class RestMappingItemVersion extends RestMappingItemVersionBase
 		super();
 	}
 
-	public RestMappingItemVersion(DynamicVersion<?> semantic, int targetColPosition, int equivalenceTypeColPosition, boolean expandDescriptions,
+	public RestMappingItemVersion(DynamicVersion semantic, int targetColPosition, int equivalenceTypeColPosition, boolean expandDescriptions,
 			boolean expandComments, List<RestMappingSetDisplayField> displayFieldsFromMapSet)
 	{
 		final StampCoordinate stampCoordinate = RequestInfo.get().getStampCoordinate();
@@ -179,7 +179,7 @@ public class RestMappingItemVersion extends RestMappingItemVersionBase
 				}
 				else if (i == equivalenceTypeColPosition)
 				{
-					qualifierConcept = ((data[i] != null) ? new RestIdentifiedObject(((DynamicUUID) data[i]).getDataUUID()) : null);
+					equivalenceTypeConcept = ((data[i] != null) ? new RestIdentifiedObject(((DynamicUUID) data[i]).getDataUUID()) : null);
 					offset++;
 				}
 				else
@@ -210,7 +210,7 @@ public class RestMappingItemVersion extends RestMappingItemVersionBase
 				// Only need to return these for computed fields...
 				if (fieldFromMapSet.componentType.enumId != MapSetItemComponent.ITEM_EXTENDED.ordinal())
 				{
-					computedDisplayFields.add(constructDisplayField(mapSetConcept.nid, sourceConcept.nid, targetConcept, qualifierConcept, fieldFromMapSet.id,
+					computedDisplayFields.add(constructDisplayField(mapSetConcept.nid, sourceConcept.nid, targetConcept, equivalenceTypeConcept, fieldFromMapSet.id,
 							MapSetItemComponent.valueOf(fieldFromMapSet.componentType.enumName)));
 				}
 			}
@@ -316,6 +316,6 @@ public class RestMappingItemVersion extends RestMappingItemVersionBase
 	{
 		return "RestMappingItemVersion [expandables=" + expandables + ", identifiers=" + identifiers + ", mappingItemStamp=" + mappingItemStamp
 				+ ", mapSetConcept=" + mapSetConcept + ", sourceConcept=" + sourceConcept + ", targetConcept=" + targetConcept + ", equivalenceTypeConcept="
-				+ qualifierConcept + ", mapItemExtendedFields=" + mapItemExtendedFields + "]";
+				+ equivalenceTypeConcept + ", mapItemExtendedFields=" + mapItemExtendedFields + "]";
 	}
 }

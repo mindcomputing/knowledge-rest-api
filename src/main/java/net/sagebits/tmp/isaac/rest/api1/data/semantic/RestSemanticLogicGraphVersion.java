@@ -35,6 +35,7 @@ import javax.xml.bind.annotation.XmlRootElement;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestException;
 import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
 import net.sagebits.tmp.isaac.rest.api1.data.logic.RestLogicNode;
@@ -60,7 +61,8 @@ public class RestSemanticLogicGraphVersion extends RestSemanticVersion
 	private static Logger LOG = LogManager.getLogger();
 
 	/**
-	 * The String text of the description of the associated concept
+	 * The String text of the description of the associated concept, with the stamp aligned to the version being returned.
+	 * May be null, if no description is available on the concept at the given stamp.
 	 */
 	@XmlElement
 	public String referencedConceptDescription;
@@ -98,16 +100,19 @@ public class RestSemanticLogicGraphVersion extends RestSemanticVersion
 		super();
 		setup(lgs, includeChronology, false, expandReferenced, useLatestStampForExpansions, null);
 
-		referencedConceptDescription = Get.conceptService().getSnapshot(RequestInfo.get().getManifoldCoordinate())
-				.conceptDescriptionText(lgs.getReferencedComponentNid());
-		LOG.debug("Constructing REST logic graph for {} from LogicalExpression\n{}", new RestIdentifiedObject(lgs.getReferencedComponentNid()).toString(),
-				lgs.getLogicalExpression().toString());
-		
 		ManifoldCoordinate coordForRead = RequestInfo.get().getManifoldCoordinate();
 		if (!useLatestStampForExpansions)
 		{
 			coordForRead = new ManifoldCoordinateImpl(computeVersionStamp(lgs, useLatestStampForExpansions), coordForRead.getLanguageCoordinate());
 		}
+		
+		Get.conceptService().getSnapshot(coordForRead).getDescriptionOptional(lgs.getReferencedComponentNid()).ifPresent(dv -> 
+		{
+			referencedConceptDescription = dv.getText();
+		});
+
+		LOG.debug("Constructing REST logic graph for {} from LogicalExpression\n{}", new RestIdentifiedObject(lgs.getReferencedComponentNid()).toString(),
+				lgs.getLogicalExpression().toString());
 		
 		rootLogicNode = constructRootRestLogicNodeFromLogicGraphVersion(lgs, coordForRead);
 		try
@@ -134,18 +139,20 @@ public class RestSemanticLogicGraphVersion extends RestSemanticVersion
 	{
 		LogicalExpression le = lgs.getLogicalExpression();
 
-		LOG.debug("Processing LogicalExpression for concept {}",
-				Get.conceptService().getSnapshot(RequestInfo.get().getManifoldCoordinate()).conceptDescriptionText(le.getConceptBeingDefinedNid()));
-		LOG.debug(le.toString());
-		LOG.debug("Root is a {}", le.getRoot().getNodeSemantic().name());
+		LOG.debug("Processing LogicalExpression for concept {} and expression {}, root is a {}",
+				Util.readBestDescription(le.getConceptBeingDefinedNid()), le.toString(), 
+				le.getRoot().getNodeSemantic().name());
 
 		if (le.getNodeCount() > 0)
 		{
-			LOG.debug("Passed LogicalExpression with {} > 0 nodes", le.getNodeCount());
-			for (int i = 0; i < le.getNodeCount(); ++i)
+			if (LOG.isDebugEnabled())
 			{
-				LOG.debug("{} node #{} of {}: class={}, {}", le.getNode(i).getNodeSemantic(), ((int) i + 1), le.getNodeCount(),
-						le.getNode(i).getClass().getName(), le.getNode(i));
+				LOG.debug("Passed LogicalExpression with {} > 0 nodes", le.getNodeCount());
+				for (int i = 0; i < le.getNodeCount(); ++i)
+				{
+					LOG.debug("{} node #{} of {}: class={}, {}", le.getNode(i).getNodeSemantic(), ((int) i + 1), le.getNodeCount(),
+							le.getNode(i).getClass().getName(), le.getNode(i));
+				}
 			}
 
 			return RestLogicNodeFactory.create(le.getRoot(), coordForRead);
@@ -154,7 +161,7 @@ public class RestSemanticLogicGraphVersion extends RestSemanticVersion
 		{ // (le.getNodeCount() <= 0) {
 			LOG.warn("Passed LogicalExpression with no children");
 			throw new RuntimeException("No children found in LogicalExpression for "
-					+ Get.conceptService().getSnapshot(RequestInfo.get().getManifoldCoordinate()).conceptDescriptionText(le.getConceptBeingDefinedNid()) + ": " + lgs);
+					+ Util.readBestDescription(le.getConceptBeingDefinedNid()) + ": " + lgs);
 		}
 	}
 }

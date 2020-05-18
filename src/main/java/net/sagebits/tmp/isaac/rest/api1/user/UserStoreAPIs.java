@@ -51,9 +51,9 @@ import net.sagebits.tmp.isaac.rest.api1.RestPaths;
 import net.sagebits.tmp.isaac.rest.api1.data.user.RestUserData;
 import net.sagebits.tmp.isaac.rest.session.RequestInfo;
 import net.sagebits.tmp.isaac.rest.session.RequestParameters;
+import net.sagebits.uts.auth.data.User;
 import net.sagebits.uts.auth.data.UserRole.SystemRoleConstants;
 import net.sagebits.uts.auth.rest.session.AuthRequestParameters;
-import sh.isaac.MetaData;
 import sh.isaac.api.Get;
 
 /**
@@ -104,9 +104,9 @@ public class UserStoreAPIs
 		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.id, RequestParameters.local, 
 				RequestParameters.global, AuthRequestParameters.ssoToken, RequestParameters.editToken);
 		
-		if (!RequestInfo.get().getUser().isPresent() || MetaData.USER____SOLOR.getPrimordialUuid().equals(RequestInfo.get().getUser().get().userId))
+		if (!RequestInfo.get().getUser().isPresent() || User.ANON_READ_ID.equals(RequestInfo.get().getUser().get().userId))
 		{
-			throw new RestException("An sso token or an edit token must be passed to provide user information  You provided: " + RequestInfo.get().getUser());
+			throw new RestException("An sso token or user information must be passed to provide user information.  You provided: " + RequestInfo.get().getUser());
 		}
 		
 		boolean localOnly = Boolean.parseBoolean(local);
@@ -145,8 +145,6 @@ public class UserStoreAPIs
 	 *     overrides the global value (if any).  You can specify global or local specifically, via parameter, if desired.  Specifying global
 	 *     and local is illegal.
 	 *      
-	 * @param id The id key of the data to retrieve.  Throws an exception if the data doesn't exist, otherwise, 
-	 *     returns the data as it was provided.
 	 * @param local - optional - true to force this method to ignore global data, and only return this data if it is present locally.
 	 * @param global - optional - true to force this method to ignore local data, and only return the data if it is present globally.
 	 * @param editToken -
@@ -166,9 +164,9 @@ public class UserStoreAPIs
 		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.local, RequestParameters.global, 
 				AuthRequestParameters.ssoToken, RequestParameters.editToken);
 		
-		if (!RequestInfo.get().getUser().isPresent() || MetaData.USER____SOLOR.getPrimordialUuid().equals(RequestInfo.get().getUser().get().userId))
+		if (!RequestInfo.get().getUser().isPresent() || User.ANON_READ_ID.equals(RequestInfo.get().getUser().get().userId))
 		{
-			throw new RestException("An sso token or an edit token must be passed to provide user information.  You provided: " + RequestInfo.get().getUser());
+			throw new RestException("An sso token or user information must be passed to provide user information.  You provided: " + RequestInfo.get().getUser());
 		}
 		
 		boolean localOnly = Boolean.parseBoolean(local);

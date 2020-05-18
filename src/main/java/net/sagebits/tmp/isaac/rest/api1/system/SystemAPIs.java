@@ -31,6 +31,7 @@
 package net.sagebits.tmp.isaac.rest.api1.system;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.Optional;
 import java.util.OptionalInt;
 import java.util.Set;
@@ -113,16 +114,25 @@ public class SystemAPIs
 	 * @param id The id for which to retrieve objects. May be a UUID or NID
 	 * @param expand comma separated list of fields to expand. Support depends on type of object identified by the passed id.
 	 *     Both concepts and semantics support:
-	 *       <br> 'versionsAll' - returns all versions of the concept.  Note that, this only includes all versions for the top level concept chronology.
+	 *       <br> 'versionsAll' - <p>returns all versions of the concept.  Note that, this only includes all versions for the top level concept chronology.
 	 *         For nested objects, the most appropriate version is returned, relative to the version of the concept being returned.  In other words, the STAMP 
-	 *         of the concept version being returned is used to calculate the appropriate stamp for the referenced component versions, when they are looked up.
-	 *         Sorted newest to oldest
+	 *         of the component version being returned is used to calculate the appropriate stamp for the referenced component versions, when they are looked up.
+	 *     <br>
+	 *         This can lead to a version of a referenced component being unavailable at a calculated stamp, especially in cases where the concept version 
+	 *         is older than the earliest version of the referenced component - which can happen depending on which content is loaded (or in what order).  
+	 *         Callers should handle null version fields for nested components.
+	 *     <br>
+	 *         Because the stamp of the concept version being returned might be older than the stamps of the available referenced components, we always return 
+	 *         two copies of the newest version when versionsAll is specified.  The first - position 0 in the return - will be calculated with the stamp supplied 
+	 *         in the request for all components.  The second - position 1 - will contain the same top level version, but any referenced components will have 
+	 *         been rendered with a stamp from the concept version.  Beyond the first two positions, all additional versions are sorted newest to oldest.
+	 *         </p>
 	 *       <br> 'versionsLatestOnly' - ignored if specified in combination with versionsAll
 	 *       <br>
 	 *       <br> In addition, if the passed in id is a semantic, then it also supports:
 	 *       <br> 'referencedDetails' - When referencedDetails is passed, nids will include type information, and certain nids will also include their descriptions,
 	 *            if they represent a concept or a description semantic.
-	 *       <br> 'nestedSemantics' - 
+	 *       <br> 'nestedSemantics' - include any nested semantics on the semantic
 	 * @param coordToken specifies an explicit serialized CoordinatesToken string specifying all coordinate parameters. A CoordinatesToken
 	 *            may be obtained by a separate (prior) call to getCoordinatesToken().
 	 * @param altId - (optional) the altId type(s) to populate in any returned RestIdentifiedObject structures.  By default, no alternate IDs are 
@@ -473,6 +483,29 @@ public class SystemAPIs
 
 		return terminologies.toArray(new RestTerminologyConcept[terminologies.size()]);
 	}
+	
+	/**
+	 * Return the (sorted) general terminology types that are currently supported in this system which should 
+	 * follow SNOMED terminology rules, for descriptions, validation, etc.
+	 * @return the terminology types
+	 * @throws RestException 
+	 */
+	@GET
+	@Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+	@Path(RestPaths.sctTerminologyTypes)
+	public RestConceptChronology[] getSctTerminologyTypes() throws RestException
+	{
+		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.COORDINATE_PARAM_NAMES);
+
+		HashSet<Integer> nids = Frills.getSCTRulesTermTypes();
+		RestConceptChronology[] result = new RestConceptChronology[nids.size()];
+		int i = 0;
+		for (int nid : nids)
+		{
+			result[i++] = new RestConceptChronology(Get.concept(nid), false, false, false);
+		}
+		return result;
+	}
 
 	/**
 	 * Return the taxonomy tree, rooted at the metadata concept MODULE, of the available modules in this
@@ -508,7 +541,6 @@ public class SystemAPIs
 							Get.configurationService().getGlobalDatastoreConfiguration().getDefaultLanguageCoordinate(), 
 							Get.configurationService().getGlobalDatastoreConfiguration().getDefaultLogicCoordinate()));
 
-			// TODO there is a bug here - the addChildren reads coords from the RequestInfo, if they pass in weird coords, it will mess up this call.
 			TaxonomyAPIs.addChildren(MetaData.MODULE____SOLOR.getNid(), rcv, tss, true, false, false, 3, false, false, new NidSet(), 1, 500);
 
 			if (availableOnly == null || Boolean.parseBoolean(availableOnly))
@@ -525,6 +557,7 @@ public class SystemAPIs
 				rcv.children.results = filteredResults.toArray(new RestConceptVersion[filteredResults.size()]);
 				rcv.children.paginationData.approximateTotal = filteredResults.size();
 			}
+			rcv.sortParentsAndChildren();
 			return rcv;
 		}
 
@@ -561,16 +594,22 @@ public class SystemAPIs
 			throw new RestException("The passed in concept '" + id + "' is not a child of the MODULE constant.  " + "It should be a direct child of "
 					+ MetaData.MODULE____SOLOR.getPrimordialUuid());
 		}
-
-		Frills.getAllChildrenOfConcept(MetaData.DESCRIPTION_TYPE_IN_SOURCE_TERMINOLOGY____SOLOR.getNid(), true, true, RequestInfo.get().getStampCoordinate())
-				.forEach(descType -> {
-					ConceptChronology concept = Get.conceptService().getConceptChronology(descType);
-					//TODO I think this MOdule_solor should have changed to the metadata module, but not sure.  need to figure out why I added the test.
-					if (cc.getNid() != MetaData.MODULE____SOLOR.getNid() && Frills.getTerminologyTypes(concept, null).contains(cc.getNid()))
-					{
-						results.add(new RestConceptChronology(concept, false, false, false));
-					}
-				});
+		
+		if (cc.getNid() == MetaData.CORE_METADATA_MODULE____SOLOR.getNid() || cc.getNid() == MetaData.MODULE____SOLOR.getNid())
+		{
+			log.debug("no extended description types used in core terminiologies");
+		}
+		else
+		{
+			Frills.getAllChildrenOfConcept(MetaData.DESCRIPTION_TYPE_IN_SOURCE_TERMINOLOGY____SOLOR.getNid(), true, true, RequestInfo.get().getStampCoordinate())
+					.forEach(descType -> {
+						ConceptChronology concept = Get.conceptService().getConceptChronology(descType);
+						if (Frills.getTerminologyTypes(concept, null).contains(cc.getNid()))
+						{
+							results.add(new RestConceptChronology(concept, false, false, false));
+						}
+					});
+		}
 
 		return results.toArray(new RestConceptChronology[results.size()]);
 	}
@@ -633,7 +672,7 @@ public class SystemAPIs
 							}
 							if (typeInfo.size() > 0)
 							{
-								DynamicVersion<?> dv = (DynamicVersion<?>)Get.assemblageService()
+								DynamicVersion dv = (DynamicVersion)Get.assemblageService()
 										.getSemanticChronology(typeInfo.findFirst().getAsInt()).getLatestVersion(RequestInfo.get().getStampCoordinate()).get();
 								DynamicUUID type = (DynamicUUID)dv.getData(0);
 								
@@ -729,7 +768,7 @@ public class SystemAPIs
 					}
 					else
 					{
-						DynamicVersion<?> dv = (DynamicVersion<?>)Get.assemblageService()
+						DynamicVersion dv = (DynamicVersion)Get.assemblageService()
 								.getSemanticChronology(typeInfo.findFirst().getAsInt()).getLatestVersion(RequestInfo.get().getStampCoordinate()).get();
 						DynamicUUID type = (DynamicUUID)dv.getData(0);
 						
@@ -815,7 +854,7 @@ public class SystemAPIs
 	private RestDescriptionStyle getDescriptionStyleForTerminologyInternal(ConceptChronology termType) throws RestException
 	{
 		//these are always native, even if some extended types got created for testing or something along those lines.
-		if (termType.getNid() == MetaData.SNOMED_CT_CORE_MODULES____SOLOR.getNid() || termType.getNid() == MetaData.CORE_METADATA_MODULE____SOLOR.getNid())
+		if (Frills.getSCTRulesTermTypes().contains(termType.getNid()))
 		{
 			return new RestDescriptionStyle(DescriptionStyle.NATIVE);
 		}
@@ -838,19 +877,25 @@ public class SystemAPIs
 		}
 		
 		//See if it has extended types
-		
-		if (Frills.getAllChildrenOfConcept(MetaData.DESCRIPTION_TYPE_IN_SOURCE_TERMINOLOGY____SOLOR.getNid(), true, true, RequestInfo.get().getStampCoordinate())
-		.stream().filter(descType -> {
-			ConceptChronology concept = Get.conceptService().getConceptChronology(descType);
-			//TODO I think this MOdule_solor should have changed to the metadata module, but not sure.  need to figure out why I added the test.
-			if (termType.getNid() != MetaData.MODULE____SOLOR.getNid() && Frills.getTerminologyTypes(concept, null).contains(termType.getNid()))
-			{
-				return true;
-			}
-			return false;
-		}).findFirst().isPresent())
+		if (termType.getNid() == MetaData.CORE_METADATA_MODULE____SOLOR.getNid() || termType.getNid() == MetaData.MODULE____SOLOR.getNid())
 		{
-			return new RestDescriptionStyle(DescriptionStyle.EXTENDED);
+			log.debug("no extended description types used in core terminiologies");
+		}
+		else
+		{
+		
+			if (Frills.getAllChildrenOfConcept(MetaData.DESCRIPTION_TYPE_IN_SOURCE_TERMINOLOGY____SOLOR.getNid(), true, true, RequestInfo.get().getStampCoordinate())
+			.stream().filter(descType -> {
+				ConceptChronology concept = Get.conceptService().getConceptChronology(descType);
+				if (Frills.getTerminologyTypes(concept, null).contains(termType.getNid()))
+				{
+					return true;
+				}
+				return false;
+			}).findFirst().isPresent())
+			{
+				return new RestDescriptionStyle(DescriptionStyle.EXTENDED);
+			}
 		}
 		
 		//No external or extended types, must be native

@@ -233,7 +233,7 @@ public abstract class RestSemanticVersion
 			case DESCRIPTION:
 				return new RestSemanticDescriptionVersion((DescriptionVersion) sv, includeChronology, expandNested, expandReferenced, useLatestStampForExpansions);
 			case DYNAMIC:
-				return new RestDynamicSemanticVersion((DynamicVersion<?>) sv, includeChronology, expandNested, expandReferenced, useLatestStampForExpansions);
+				return new RestDynamicSemanticVersion((DynamicVersion) sv, includeChronology, expandNested, expandReferenced, useLatestStampForExpansions);
 			case LONG:
 				return new RestDynamicSemanticVersion((LongVersion) sv, includeChronology, expandNested, expandReferenced, useLatestStampForExpansions);
 			case MEMBER:

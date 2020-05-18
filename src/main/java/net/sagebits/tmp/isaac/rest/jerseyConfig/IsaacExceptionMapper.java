@@ -32,18 +32,23 @@ package net.sagebits.tmp.isaac.rest.jerseyConfig;
 
 
 import java.io.IOException;
+import java.io.StringWriter;
 import javax.ws.rs.ClientErrorException;
+import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import javax.ws.rs.ext.ExceptionMapper;
 import javax.ws.rs.ext.Provider;
+import javax.xml.bind.JAXBContext;
+import javax.xml.bind.Marshaller;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestException;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestExceptionResponse;
+import net.sagebits.tmp.isaac.rest.session.RequestInfo;
 
 /**
  * 
@@ -56,45 +61,64 @@ public class IsaacExceptionMapper implements ExceptionMapper<Exception>
 {
 	private static Logger log = LogManager.getLogger("web");
 	
-	private static String serialize(RestExceptionResponse restExceptionResponse) throws JsonProcessingException {
-		return new ObjectMapper().writeValueAsString(restExceptionResponse);
-	}
-
-	private static Response buildResponse(RestExceptionResponse response) {
-		String json = null;
-		try {
-			json = serialize(response);
-		} catch (JsonProcessingException e) {
-			log.error("Failed serializing-to-json RestExceptionResponse " + response);
-			json = "{\"conciseMessage\":\"Failed serializing response\"}";
+	/**
+	 * Reads the initial requested format from the request, tries to format the error the same, otherwise, returns a string.
+	 * @param response
+	 * @param errorFormat
+	 * @return
+	 */
+	private Response buildResponse(RestExceptionResponse response) {
+		String errorMessage;
+		String mediaType = MediaType.TEXT_PLAIN;
+		
+		ContainerRequestContext crc = RequestInfo.get().getContext(); 
+		String errorFormat = crc == null ? null : crc.getHeaderString("Accept");
+		
+		if (MediaType.APPLICATION_XML.equals(errorFormat))
+		{
+			try
+			{
+				JAXBContext jaxbContext = null;
+				StringWriter xmlWriter = new StringWriter();
+				jaxbContext = JAXBContext.newInstance(RestExceptionResponse.class);
+				Marshaller jaxbMarshaller = jaxbContext.createMarshaller();
+				jaxbMarshaller.setProperty(Marshaller.JAXB_FORMATTED_OUTPUT, true);
+				jaxbMarshaller.marshal(response, xmlWriter);
+				errorMessage = xmlWriter.toString();
+				mediaType = MediaType.APPLICATION_XML;
+			}
+			catch (Exception e)
+			{
+				log.error("Failed serializing-to-xml RestExceptionResponse " + response, e);
+				errorMessage = response.toString();
+				
+			}
+		}
+		else if (MediaType.APPLICATION_JSON.equals(errorFormat))
+		{
+			try {
+				errorMessage = new ObjectMapper().writeValueAsString(response);
+				mediaType = MediaType.APPLICATION_JSON;
+			} catch (JsonProcessingException e) {
+				log.error("Failed serializing-to-json RestExceptionResponse " + response, e);
+				errorMessage = response.toString();
+			}
+		}
+		else
+		{
+			errorMessage = response.toString();
 		}
 		Status status = response.getStatus() != null ? response.getStatus(): Status.INTERNAL_SERVER_ERROR;
 		
-		return Response.status(status).entity(json).type(MediaType.APPLICATION_JSON).build();
+		return Response.status(status).entity(errorMessage).type(mediaType).build();
 	}
 	
 	@Override
 	public Response toResponse(Exception ex)
 	{
 		Status status = Status.INTERNAL_SERVER_ERROR; // Default is INTERNAL_SERVER_ERROR
-		
-		// Place any Exception with its own response status and handling here
-		if (ex instanceof SecurityException || (ex instanceof IOException && ((IOException)ex).getCause() instanceof SecurityException))
-		{
-			log.info("SecurityException: " + ex.getMessage());
-
-			RestExceptionResponse response = new RestExceptionResponse(
-					"SecurityException",
-					ex.getMessage(),
-					null,
-					null,
-					Status.FORBIDDEN);
-			return buildResponse(response);
-		}
-
 		boolean sendMessage = false;
 
-		// Place any Exceptions that fall through to 500 here
 		if (ex instanceof ClientErrorException)
 		{
 			log.info("ClientError:" + ex.toString());
@@ -105,8 +129,9 @@ public class IsaacExceptionMapper implements ExceptionMapper<Exception>
 			sendMessage = true;
 			log.warn(ex.getMessage());
 		}
-		else if (ex.getMessage() != null && ex.getMessage().startsWith("Edit Token is no longer valid for write"))
+		else if ((ex instanceof SecurityException) || (ex instanceof IOException && ((IOException)ex).getCause() instanceof SecurityException))
 		{
+			RequestInfo.get().setAuthFail(ex.getMessage());
 			status = Status.UNAUTHORIZED;
 			sendMessage = true;
 			log.info(ex.getMessage());
@@ -148,7 +173,7 @@ public class IsaacExceptionMapper implements ExceptionMapper<Exception>
 			RestException re = (RestException) ex;
 			
 			// Assume that RestException indicates a BAD_REQUEST
-			status = Status.BAD_REQUEST;
+			status = re.getStatus();
 			RestExceptionResponse exceptionResponse = new RestExceptionResponse(
 					re.toString(),
 					re.toString(),

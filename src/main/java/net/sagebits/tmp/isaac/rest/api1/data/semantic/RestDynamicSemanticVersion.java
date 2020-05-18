@@ -69,7 +69,7 @@ public class RestDynamicSemanticVersion extends RestSemanticVersion
 		// for Jaxb
 	}
 
-	public RestDynamicSemanticVersion(DynamicVersion<?> dsv, boolean includeChronology, boolean expandNested, boolean expandReferenced, 
+	public RestDynamicSemanticVersion(DynamicVersion dsv, boolean includeChronology, boolean expandNested, boolean expandReferenced, 
 			boolean useLatestStamp) throws RestException
 	{
 		super(dsv, includeChronology, expandNested, expandReferenced, useLatestStamp, null);

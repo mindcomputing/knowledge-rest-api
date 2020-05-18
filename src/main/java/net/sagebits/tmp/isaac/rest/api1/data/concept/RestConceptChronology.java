@@ -49,6 +49,9 @@ import net.sagebits.tmp.isaac.rest.api.data.Expandable;
 import net.sagebits.tmp.isaac.rest.api.data.Expandables;
 import net.sagebits.tmp.isaac.rest.api1.RestPaths;
 import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
+import net.sagebits.tmp.isaac.rest.api1.data.enumerations.RestSemanticStyle;
+import net.sagebits.tmp.isaac.rest.api1.data.enumerations.SemanticStyle;
+import net.sagebits.tmp.isaac.rest.api1.semantic.SemanticAPIs;
 import net.sagebits.tmp.isaac.rest.session.RequestInfo;
 import net.sagebits.tmp.isaac.rest.session.RequestParameters;
 import sh.isaac.MetaData;
@@ -116,6 +119,14 @@ public class RestConceptChronology implements Comparable<RestConceptChronology>
 	@XmlElement
 	@JsonInclude(JsonInclude.Include.NON_NULL)
 	RestIdentifiedObject[] terminologyTypes;
+	
+	/**
+	 * If the specified concept is configured as a Semantic Assemblage, then this field with be populated with the general style of the semantic.
+	 * For further details on the semantic configuration, use /semantic/semanticDefinition/{conceptId}
+	 */
+	@XmlElement
+	@JsonInclude(JsonInclude.Include.NON_NULL)
+	RestSemanticStyle semanticStyle;
 
 	protected RestConceptChronology()
 	{
@@ -136,6 +147,14 @@ public class RestConceptChronology implements Comparable<RestConceptChronology>
 
 	public RestConceptChronology(ConceptChronology cc, boolean includeAllVersions, boolean includeLatestVersion, boolean includeParents, 
 			boolean countParents, boolean includeTerminologyType, LanguageCoordinate descriptionLanguageCoordinate, boolean stated)
+	{
+		this(cc, includeAllVersions, includeLatestVersion, includeParents, countParents, false, false, includeTerminologyType, descriptionLanguageCoordinate, 
+				stated, false);
+	}
+	
+	public RestConceptChronology(ConceptChronology cc, boolean includeAllVersions, boolean includeLatestVersion, boolean includeParents, 
+			boolean countParents, boolean includeChildren, boolean countChildren, boolean includeTerminologyType, LanguageCoordinate descriptionLanguageCoordinate, 
+			boolean stated, boolean includeSemanticMembership)
 	{
 		identifiers = new RestIdentifiedObject(cc);
 
@@ -166,18 +185,8 @@ public class RestConceptChronology implements Comparable<RestConceptChronology>
 				List<ConceptVersion> cvl = cc.getVersionList();
 				for (ConceptVersion cv : cvl)
 				{
-					versions.add(new RestConceptVersion(cv, false, includeParents, countParents, false, false, stated, false, false, false));
-				}
-			}
-			else // if (includeLatestVersion)
-			{
-				LatestVersion<ConceptVersion> latest = cc.getLatestVersion(RequestInfo.get().getStampCoordinate());
-				Util.logContradictions(log, latest);
-
-				if (latest.isPresent())
-				{
-					// TODO handle contradictions
-					versions.add(new RestConceptVersion(latest.get(), false, includeParents, countParents, false, false, stated, false, false, true));
+					versions.add(new RestConceptVersion(cv, false, includeParents, countParents, includeChildren, countChildren, stated, 
+							includeSemanticMembership, includeTerminologyType, false));
 				}
 				
 				//newest to oldest
@@ -189,6 +198,27 @@ public class RestConceptChronology implements Comparable<RestConceptChronology>
 						return -1 * Long.compare(o1.conVersion.time, o2.conVersion.time);
 					}
 				});
+				
+				//When returning all versions, we still want a "current" view of the semantic.  So we always return the first 
+				//version as calcuated with the stamp set to the requested stamp, rather than the version stamp.
+				LatestVersion<ConceptVersion> latest = cc.getLatestVersion(RequestInfo.get().getStampCoordinate());
+				if (latest.isPresent())
+				{
+					versions.add(0, new RestConceptVersion(latest.get(), false, includeParents, countParents, includeChildren, countChildren, stated, 
+							includeSemanticMembership, includeTerminologyType, true));
+				}
+			}
+			else // if (includeLatestVersion)
+			{
+				LatestVersion<ConceptVersion> latest = cc.getLatestVersion(RequestInfo.get().getStampCoordinate());
+				Util.logContradictions(log, latest);
+
+				if (latest.isPresent())
+				{
+					// TODO handle contradictions
+					versions.add(new RestConceptVersion(latest.get(), false, includeParents, countParents, includeChildren, countChildren, stated, 
+							includeSemanticMembership, includeTerminologyType, true));
+				}
 			}
 		}
 		else
@@ -204,6 +234,12 @@ public class RestConceptChronology implements Comparable<RestConceptChronology>
 			{
 				expandables = null;
 			}
+		}
+		
+		SemanticStyle ss = SemanticAPIs.getSemanticStyle(cc.getNid());
+		if (ss != null && ss != SemanticStyle.NONE)
+		{
+			semanticStyle = new RestSemanticStyle(ss);
 		}
 	}
 

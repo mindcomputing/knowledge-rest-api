@@ -19,7 +19,8 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
+import net.sagebits.tmp.isaac.rest.api1.data.concept.RestConceptChronology;
+import sh.isaac.api.Get;
 
 /**
  * {@link RestClassifierCyclePath}
@@ -36,7 +37,7 @@ public class RestClassifierCyclePath
 	 * The isA path of concepts that forms the cycle from the conceptWithCycle back to itself
 	 */
 	@XmlElement
-	private RestIdentifiedObject[] cyclePath;
+	private RestConceptChronology[] cyclePath;
 	
 	
 	protected RestClassifierCyclePath()
@@ -49,11 +50,11 @@ public class RestClassifierCyclePath
 	 */
 	public RestClassifierCyclePath(int[] cyclePathNids)
 	{
-		this.cyclePath = new RestIdentifiedObject[cyclePathNids.length];
+		this.cyclePath = new RestConceptChronology[cyclePathNids.length];
 		
 		for (int i = 0; i < cyclePathNids.length; i++)
 		{
-			this.cyclePath[i] = new RestIdentifiedObject(cyclePathNids[i]);
+			this.cyclePath[i] = new RestConceptChronology(Get.concept(cyclePathNids[i]), false, false, false);
 		}
 	}
 }

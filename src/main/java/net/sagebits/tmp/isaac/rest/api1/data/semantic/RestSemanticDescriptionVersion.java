@@ -31,24 +31,29 @@
 package net.sagebits.tmp.isaac.rest.api1.data.semantic;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
+import org.apache.logging.log4j.LogManager;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestException;
 import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
+import net.sagebits.tmp.isaac.rest.api1.data.semantic.dataTypes.RestDynamicSemanticNid;
 import net.sagebits.tmp.isaac.rest.session.RequestInfo;
 import sh.isaac.MetaData;
 import sh.isaac.api.Get;
 import sh.isaac.api.Status;
-import sh.isaac.api.collections.NidSet;
 import sh.isaac.api.component.semantic.version.DescriptionVersion;
 import sh.isaac.api.constants.DynamicConstants;
 import sh.isaac.api.coordinate.StampPrecedence;
 import sh.isaac.api.externalizable.IsaacObjectType;
+import sh.isaac.api.util.AlphanumComparator;
 import sh.isaac.model.coordinate.ManifoldCoordinateImpl;
 import sh.isaac.model.coordinate.StampCoordinateImpl;
 import sh.isaac.model.coordinate.StampPositionImpl;
@@ -63,7 +68,7 @@ import sh.isaac.utility.Frills;
 @XmlRootElement
 @JsonAutoDetect(fieldVisibility = JsonAutoDetect.Visibility.ANY, getterVisibility = JsonAutoDetect.Visibility.NONE, setterVisibility = JsonAutoDetect.Visibility.NONE)
 @JsonTypeInfo(use = JsonTypeInfo.Id.CLASS, include = JsonTypeInfo.As.PROPERTY)
-public class RestSemanticDescriptionVersion extends RestSemanticVersion
+public class RestSemanticDescriptionVersion extends RestSemanticVersion implements Comparable<RestSemanticDescriptionVersion>
 {
 	/**
 	 * The concept that represents the case significance flag on the description .
@@ -93,7 +98,7 @@ public class RestSemanticDescriptionVersion extends RestSemanticVersion
 
 	/**
 	 * The optional concept that represents the extended type of the description.
-	 * This should be a {@link MetaData#EXTENDED_DESCRIPTION_TYPE____SOLOR}.
+	 * This should be a child of {@link MetaData#EXTENDED_DESCRIPTION_TYPE____SOLOR}.
 	 */
 	@XmlElement
 	public RestIdentifiedObject descriptionExtendedTypeConcept;
@@ -143,6 +148,76 @@ public class RestSemanticDescriptionVersion extends RestSemanticVersion
 		{
 			descriptionExtendedTypeConcept = new RestIdentifiedObject(descriptionExtendedTypeOptional.get());
 		}
+		
+		sortDialects();
+	}
+
+	/**
+	 * Sorts preferred before acceptable, and orders dialects by us-en, us-gb, then alphabetical
+	 */
+	private void sortDialects()
+	{
+		if (dialects.size() > 1)
+		{
+			Collections.sort(dialects, new Comparator<RestDynamicSemanticVersion>()
+			{
+				@Override
+				public int compare(RestDynamicSemanticVersion o1, RestDynamicSemanticVersion o2)
+				{
+					//This is a semantic with a single nid column, which represents preferred or acceptable.  
+					//The assemblage concept will be something like "US English Dialect"
+					
+					//If preferred / acceptable is the same, sort on the dialects...
+					if (((RestDynamicSemanticNid)o1.dataColumns.get(0)).getNid() == ((RestDynamicSemanticNid)o2.dataColumns.get(0)).getNid())
+					{
+						if (o1.semanticChronology != null)  //If one chronology is here, they both should be here
+						{
+							if (o1.semanticChronology.assemblage.nid.intValue() == MetaData.US_ENGLISH_DIALECT____SOLOR.getNid())
+							{
+								return -1;
+							}
+							else if (o2.semanticChronology.assemblage.nid.intValue() == MetaData.US_ENGLISH_DIALECT____SOLOR.getNid())
+							{
+								return 1;
+							}
+							else if (o1.semanticChronology.assemblage.nid.intValue() == MetaData.GB_ENGLISH_DIALECT____SOLOR.getNid())
+							{
+								return -1;
+							}
+							else if (o2.semanticChronology.assemblage.nid.intValue() == MetaData.GB_ENGLISH_DIALECT____SOLOR.getNid())
+							{
+								return 1;
+							}
+							else
+							{
+								//Some other dialect... just sort on the dialect text
+								return AlphanumComparator.compare(Util.readBestDescription(o1.semanticChronology.assemblage.nid),
+										Util.readBestDescription(o2.semanticChronology.assemblage.nid),  true);
+							}
+						}
+						else
+						{
+							//If chronology isn't populated, I can't sort here
+							return 0;
+						}
+					}
+					else if (((RestDynamicSemanticNid)o1.dataColumns.get(0)).getNid() == MetaData.PREFERRED____SOLOR.getNid())
+					{
+						return -1;
+					}
+					else if (((RestDynamicSemanticNid)o2.dataColumns.get(0)).getNid() == MetaData.PREFERRED____SOLOR.getNid())
+					{
+						return 1;
+					}
+					else
+					{
+						//should be impossible - not the same, and neither is preferred - must be invalid data.
+						LogManager.getLogger().warn("Unexpected sort case");
+						return 0;
+					}
+				}
+			});
+		}
 	}
 
 	/**
@@ -155,5 +230,153 @@ public class RestSemanticDescriptionVersion extends RestSemanticVersion
 				+ ", text=" + text + ", descriptionTypeConceptNid=" + descriptionTypeConcept + ", descriptionExtendedTypeConceptNid="
 				+ descriptionExtendedTypeConcept + ", dialects=" + dialects + ", expandables=" + expandables + ", semanticChronology=" + semanticChronology
 				+ ", semanticVersion=" + semanticVersion + ", nestedSemantics=" + nestedSemantics + "]";
+	}
+
+	/**
+	 * Sort descriptions associated with the concept, sorted via many levels:
+	 * level 1 - by core types first (FSN, Regular Name, Definition) or - if not a core type, grouped by associated core type, and then 
+	 *     alphabetical by the description type within the group (fsn, regular name, definition).
+	 * level 2 - by language - EN first, and then alphabetical by the language after this
+	 * level 3 - If it has a dialect marking preferred, this comes before any descriptions with only acceptable dialect markings
+	 * level 4 - alphabetical by the text of the description
+	 */
+	@Override
+	public int compareTo(RestSemanticDescriptionVersion o)
+	{
+		//This will handle native types, and the grouping of external types.
+		int coreTypeLeft = Frills.getDescriptionType(this.descriptionTypeConcept.nid.intValue(), null);
+		int coreTypeRight = Frills.getDescriptionType(o.descriptionTypeConcept.nid.intValue(), null);
+		
+		//handle cases where 1 of the 2 is a core type
+		if (coreTypeLeft == MetaData.FULLY_QUALIFIED_NAME_DESCRIPTION_TYPE____SOLOR.getNid() 
+				|| coreTypeRight == MetaData.FULLY_QUALIFIED_NAME_DESCRIPTION_TYPE____SOLOR.getNid())
+		{
+			if (coreTypeLeft == MetaData.FULLY_QUALIFIED_NAME_DESCRIPTION_TYPE____SOLOR.getNid() 
+					&& coreTypeRight != MetaData.FULLY_QUALIFIED_NAME_DESCRIPTION_TYPE____SOLOR.getNid())
+			{
+				return -1;
+			}
+			else if (coreTypeLeft != MetaData.FULLY_QUALIFIED_NAME_DESCRIPTION_TYPE____SOLOR.getNid() 
+					&& coreTypeRight == MetaData.FULLY_QUALIFIED_NAME_DESCRIPTION_TYPE____SOLOR.getNid())
+			{
+				return 1;
+			}
+		}
+		
+		else if (coreTypeLeft == MetaData.REGULAR_NAME_DESCRIPTION_TYPE____SOLOR.getNid() 
+				|| coreTypeRight == MetaData.REGULAR_NAME_DESCRIPTION_TYPE____SOLOR.getNid())
+		{
+			if (coreTypeLeft == MetaData.REGULAR_NAME_DESCRIPTION_TYPE____SOLOR.getNid() 
+					&& coreTypeRight != MetaData.REGULAR_NAME_DESCRIPTION_TYPE____SOLOR.getNid())
+			{
+				return -1;
+			}
+			else if (coreTypeLeft != MetaData.REGULAR_NAME_DESCRIPTION_TYPE____SOLOR.getNid() 
+					&& coreTypeRight == MetaData.REGULAR_NAME_DESCRIPTION_TYPE____SOLOR.getNid())
+			{
+				return 1;
+			}
+		}
+		
+		else if (coreTypeLeft == MetaData.DEFINITION_DESCRIPTION_TYPE____SOLOR.getNid() 
+				|| coreTypeRight == MetaData.DEFINITION_DESCRIPTION_TYPE____SOLOR.getNid())
+		{
+			if (coreTypeLeft == MetaData.DEFINITION_DESCRIPTION_TYPE____SOLOR.getNid() 
+					&& coreTypeRight != MetaData.DEFINITION_DESCRIPTION_TYPE____SOLOR.getNid())
+			{
+				return -1;
+			}
+			else if (coreTypeLeft != MetaData.DEFINITION_DESCRIPTION_TYPE____SOLOR.getNid() 
+					&& coreTypeRight == MetaData.DEFINITION_DESCRIPTION_TYPE____SOLOR.getNid())
+			{
+				return 1;
+			}
+		}
+		
+		//the core types are identical.  If there is an external type - check that.
+		if (this.descriptionExtendedTypeConcept == null || o.descriptionExtendedTypeConcept == null)
+		{
+			//external (not extended) type which is different
+			if (this.descriptionTypeConcept.nid.intValue() != o.descriptionTypeConcept.nid.intValue())
+			{
+				return AlphanumComparator.compare(Util.readBestDescription(this.descriptionTypeConcept.nid.intValue()), 
+						Util.readBestDescription(o.descriptionTypeConcept.nid.intValue()), true);
+			}
+		}
+		else
+		{
+			//extended type, where the types are different
+			if (this.descriptionExtendedTypeConcept.nid.intValue() != o.descriptionExtendedTypeConcept.nid.intValue())
+			{
+				return AlphanumComparator.compare(Util.readBestDescription(this.descriptionExtendedTypeConcept.nid.intValue()), 
+						Util.readBestDescription(o.descriptionExtendedTypeConcept.nid.intValue()), true);
+			}
+		}
+		//Still tied on type, move to level 2
+		return sortLanguage(o);
+	}
+
+	private int sortLanguage(RestSemanticDescriptionVersion o)
+	{
+		if (this.languageConcept.nid.intValue() != o.languageConcept.nid.intValue())
+		{
+			if (this.languageConcept.nid.intValue() == MetaData.ENGLISH_LANGUAGE____SOLOR.getNid() || o.languageConcept.nid.intValue() == MetaData.ENGLISH_LANGUAGE____SOLOR.getNid())
+			{
+				if (this.languageConcept.nid.intValue() == MetaData.ENGLISH_LANGUAGE____SOLOR.getNid())
+				{
+					return -1;
+				}
+				else
+				{
+					return 1;
+				}
+			}
+			else
+			{
+				return AlphanumComparator.compare(Util.readBestDescription(this.languageConcept.nid.intValue()), Util.readBestDescription(o.languageConcept.nid.intValue()), true);
+			}
+		}
+		else
+		{
+			//still tied, level to 3.
+			return sortDialect(o);
+		}
+	}
+
+	private int sortDialect(RestSemanticDescriptionVersion o)
+	{
+		boolean left = hasPreferredDialect(this);
+		boolean right = hasPreferredDialect(o);
+		
+		if ((left && right) || !left && !right)
+		{
+			//still tied - level 4
+			return AlphanumComparator.compare(this.text, o.text, true);
+		}
+		else if (left && !right)
+		{
+			return -1;
+		}
+		else // (!left && right)
+		{
+			return 1;
+		}
+	}
+	
+	private boolean hasPreferredDialect(RestSemanticDescriptionVersion o)
+	{
+		if (o.dialects == null)
+		{
+			return false;
+		}
+		
+		for (RestDynamicSemanticVersion dialect : o.dialects)
+		{
+			if (((RestDynamicSemanticNid)dialect.dataColumns.get(0)).getNid() == MetaData.PREFERRED____SOLOR.getNid())
+			{
+				return true;
+			}
+		}
+		return false;
 	}
 }

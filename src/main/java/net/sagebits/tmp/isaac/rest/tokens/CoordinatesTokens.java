@@ -57,7 +57,7 @@ public class CoordinatesTokens
 	private final static Object TOKEN_BY_PARAMS_CACHE_LOCK = new Object();
 
 	private static final int DEFAULT_MAX_SIZE = 1024;
-	private static CoordinatesToken defaultCoordinatesToken = null;
+	private static volatile CoordinatesToken defaultCoordinatesToken = null;
 	private static Map<String, CoordinatesToken> OBJECT_BY_TOKEN_CACHE = null;
 	private static Map<String, String> TOKEN_BY_PARAMS_CACHE = null;
 

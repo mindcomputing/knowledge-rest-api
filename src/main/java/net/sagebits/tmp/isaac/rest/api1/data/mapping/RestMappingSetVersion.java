@@ -35,7 +35,6 @@ import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashSet;
 import java.util.List;
-import java.util.UUID;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import org.apache.logging.log4j.LogManager;
@@ -162,13 +161,13 @@ public class RestMappingSetVersion extends RestMappingSetVersionBase implements 
 	 * @param stampCoord
 	 * @param includeComments 
 	 */
-	@SuppressWarnings("rawtypes")
-	public RestMappingSetVersion(ConceptVersion mappingConcept, DynamicVersion<?> semantic, StampCoordinate stampCoord, boolean includeComments)
+	public RestMappingSetVersion(ConceptVersion mappingConcept, DynamicVersion semantic, StampCoordinate stampCoord, boolean includeComments)
 	{
 		super();
 
-		final StampCoordinate myStampCoord = stampCoord.makeCoordinateAnalog(Status.ACTIVE, Status.INACTIVE);
-		active = mappingConcept.getStatus() == Status.ACTIVE;
+		final StampCoordinate myStampCoord = stampCoord.makeCoordinateAnalog(Status.ANY_STATUS_SET);  //we checked status of the root level prior to this, 
+		//use leniant status coords when reading all the associated details.
+		active = mappingConcept.getStatus().isActive();
 		identifiers = new RestIdentifiedObject(mappingConcept.getChronology());
 		// TODO whenever we make an edit to any component of the map set, we will also need to commit the concept, so that this stamp
 		// always updates with any other stamp that is updated
@@ -199,7 +198,7 @@ public class RestMappingSetVersion extends RestMappingSetVersionBase implements 
 							value = ds.get().getData(1);
 						}
 						mapSetExtendedFields
-								.add(new RestMappingSetExtensionValue(nameNid, RestDynamicSemanticData.translate(1, value), ds.get().getStatus() == Status.ACTIVE));
+								.add(new RestMappingSetExtensionValue(nameNid, RestDynamicSemanticData.translate(1, value), ds.get().getStatus().isActive()));
 					}
 				});
 
@@ -212,7 +211,7 @@ public class RestMappingSetVersion extends RestMappingSetVersionBase implements 
 					// TODO handle contradictions
 					if (latest.isPresent())
 					{
-						DynamicVersion<?> ds = latest.get();
+						DynamicVersion ds = latest.get();
 						int nameNid = ((DynamicNid) ds.getData(0)).getDataNid();
 						DynamicData value = null;
 						if (ds.getData().length > 1)
@@ -221,7 +220,7 @@ public class RestMappingSetVersion extends RestMappingSetVersionBase implements 
 						}
 						// column number makes no sense here.
 						mapSetExtendedFields
-								.add(new RestMappingSetExtensionValue(nameNid, RestDynamicSemanticData.translate(-1, value), ds.getStatus() == Status.ACTIVE));
+								.add(new RestMappingSetExtensionValue(nameNid, RestDynamicSemanticData.translate(-1, value), ds.getStatus().isActive()));
 					}
 				});
 
@@ -271,7 +270,7 @@ public class RestMappingSetVersion extends RestMappingSetVersionBase implements 
 			}
 			else
 			{
-				int typeNid = Frills.getDescriptionType(dv, myStampCoord);
+				int typeNid = Frills.getDescriptionType(dv.getDescriptionTypeConceptNid(), myStampCoord);
 				if (typeNid == MetaData.REGULAR_NAME_DESCRIPTION_TYPE____SOLOR.getNid())
 				{
 					if (Frills.isDescriptionPreferred(dv.getNid(), myStampCoord))
@@ -325,7 +324,7 @@ public class RestMappingSetVersion extends RestMappingSetVersionBase implements 
 		displayFields.addAll(MappingAPIs.getMappingSetDisplayFieldsFromMappingSet(mappingConcept.getNid(), stampCoord));
 
 		// figure out the terminology info
-		HashSet<Integer> terminologyTypeNids = Frills.getTerminologyTypes(mappingConcept.getChronology(), RequestInfo.get().getStampCoordinate());
+		HashSet<Integer> terminologyTypeNids = Frills.getTerminologyTypes(mappingConcept.getChronology(), stampCoord);
 
 		terminologyTypes = new RestIdentifiedObject[terminologyTypeNids.size()];
 		int i = 0;

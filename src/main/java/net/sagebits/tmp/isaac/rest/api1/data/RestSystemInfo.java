@@ -60,6 +60,7 @@ import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import net.sagebits.tmp.isaac.rest.ApplicationConfig;
 import net.sagebits.tmp.isaac.rest.api1.data.systeminfo.RestDependencyInfo;
 import net.sagebits.tmp.isaac.rest.api1.data.systeminfo.RestLicenseInfo;
+import net.sagebits.tmp.isaac.rest.session.RestConfig;
 import sh.isaac.api.Get;
 import sh.isaac.api.util.metainf.MavenArtifactInfo;
 import sh.isaac.api.util.metainf.MetaInfReader;
@@ -93,7 +94,7 @@ public class RestSystemInfo
 	 * data structure.
 	 */
 	@XmlElement
-	String[] supportedAPIVersions = new String[] { "1.20.4" };
+	String[] supportedAPIVersions = new String[] { "1.24.5" };
 
 	/**
 	 * REST API Implementation Version - aka the version number of the software running here.
@@ -125,6 +126,24 @@ public class RestSystemInfo
 	 */
 	@XmlElement
 	String isaacVersion;
+	
+	/**
+	 * The server (if any) that we are pointed to for auth.
+	 */
+	@XmlElement
+	String authURL;
+	
+	/**
+	 * The server (if any) that we are pointed to for reading a DB
+	 */
+	@XmlElement
+	String artifactServerURL;
+	
+	/**
+	 * The server (if any) that we are pointed to for pushing changesets
+	 */
+	@XmlElement
+	String gitServerURL;
 
 	/**
 	 * Software Licenses
@@ -150,6 +169,9 @@ public class RestSystemInfo
 		try
 		{
 			loadIsaacMetdata();
+			authURL = RestConfig.getInstance().getAuthURL();
+			gitServerURL = RestConfig.getInstance().getGitRootURL();
+			artifactServerURL = RestConfig.getInstance().getArtifactBaseURL();
 			MavenArtifactInfo mai = MetaInfReader.readDbMetadata();
 			isaacDbDependency = new RestDependencyInfo(mai);
 			isaacDbId = Get.conceptService().getDataStoreId().toString();
@@ -212,7 +234,7 @@ public class RestSystemInfo
 				readIsaacAppMetadata.set(true);
 			}
 		}
-		else
+		else if (!readIsaacAppMetadata.get())
 		{
 			log_.warn("No Servlet Context available to utilize to locate the metadata!");
 		}

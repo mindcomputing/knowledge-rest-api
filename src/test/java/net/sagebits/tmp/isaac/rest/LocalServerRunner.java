@@ -37,6 +37,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.logging.Level;
 import javax.ws.rs.ApplicationPath;
 import javax.ws.rs.Path;
 import javax.ws.rs.core.MediaType;
@@ -47,6 +48,8 @@ import org.eclipse.jetty.servlet.ServletContextHandler;
 import org.eclipse.jetty.servlet.ServletHolder;
 import org.glassfish.jersey.jackson.JacksonFeature;
 import org.glassfish.jersey.jetty.JettyHttpContainerFactory;
+import org.glassfish.jersey.logging.LoggingFeature;
+import org.glassfish.jersey.logging.LoggingFeature.Verbosity;
 import org.glassfish.jersey.message.MessageProperties;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.server.ServerProperties;
@@ -55,6 +58,8 @@ import org.glassfish.jersey.servlet.ServletContainer;
 import eu.infomas.annotation.AnnotationDetector;
 import net.sagebits.HK2Utilities.AnnotatedClasses;
 import net.sagebits.HK2Utilities.AnnotationReporter;
+//import net.sagebits.tmp.isaac.rest.fhir.FhirServer;
+//import net.sagebits.tmp.isaac.rest.session.filters.FhirFilter;
 import sh.isaac.api.constants.SystemPropertyConstants;
 
 /**
@@ -81,6 +86,7 @@ public class LocalServerRunner
 		temp.add(RolesAllowedDynamicFeature.class);
 
 		ResourceConfig rc = new ResourceConfig(temp);
+		rc.register(new LoggingFeature(java.util.logging.Logger.getLogger("Headers"), Level.FINE, Verbosity.HEADERS_ONLY, LoggingFeature.DEFAULT_MAX_ENTITY_SIZE));
 
 		Map<String, Object> properties = new HashMap<>();
 		properties.put(MessageProperties.XML_FORMAT_OUTPUT, true);
@@ -95,6 +101,7 @@ public class LocalServerRunner
 	public static void main(String[] args) throws Exception
 	{
 		System.out.println("Launching Jetty Server for FHIR and REST APIs");
+		System.setProperty("java.util.logging.manager", "org.apache.logging.log4j.jul.LogManager");
 		
 		if (args != null && args.length >= 1 && args[0].startsWith("isaacDatabaseLocation="))
 		{
@@ -103,15 +110,23 @@ public class LocalServerRunner
 		
 		HandlerCollection hc = new HandlerCollection();
 		
+		//Fhir server
+//		ServletContextHandler fhirContext = new ServletContextHandler();
+//		fhirContext.setContextPath("/fhir/r4");
+//		fhirContext.addServlet(FhirServer.class, "/*");
+//		fhirContext.addFilter(FhirFilter.class, "/*", null);
+//		hc.addHandler(fhirContext);
+		
 		//Rest API
 		final ResourceConfig resourceConfig = configureJerseyServer();
+		resourceConfig.setApplicationName("mainRun");
 		Map<String, Object> properties = new HashMap<>();
 		properties.put(MessageProperties.XML_FORMAT_OUTPUT, true);
 		resourceConfig.addProperties(properties);
 		
 		ServletContainer jersey = new ServletContainer(resourceConfig);
 		ServletContextHandler restContext = new ServletContextHandler();
-		restContext.setContextPath("/rest/");
+		restContext.setContextPath("/rest");
 		restContext.addServlet(new ServletHolder(jersey), "/*");
 		
 		hc.addHandler(restContext);

@@ -4,25 +4,25 @@
 	<modelVersion>4.0.0</modelVersion>
 	<parent>
 		<groupId>sh.isaac</groupId>
-		<artifactId>isaac</artifactId>
-		<version>5.1.1-SNAPSHOT</version>
+		<artifactId>knowledge-core</artifactId>
+		<version>6.33-knowledge-SNAPSHOT</version>
 	</parent>
 
 	<groupId>net.sagebits.uts.rest</groupId>
-	<artifactId>uts-rest-api</artifactId>
-	<version>7.00-SNAPSHOT</version>
+	<artifactId>knowledge-rest-api</artifactId>
+	<version>7.32-SNAPSHOT</version>
 	<packaging>war</packaging>
 
-	<name>ISAAC REST Server</name>
+	<name>Knowledge REST Server</name>
 
 	<description>
-		A REST server with a simple data model for accessing ISAAC functionality.  Primarily supports
-		the ISAAC web GUI.
+		A REST server with a simple data model for accessing Solor.io functionality.  Primarily supports
+		the Knowledge web GUI.  
 	</description>
 
 	<organization>
-		<name>VetsEZ (Veterans EZ Info, Inc.) in combination with Sagebits LLC</name>
-		<url>http://vetsez.company/</url>
+		<name>Mind Computing in combination with Sagebits LLC</name>
+		<url>https://mindcomputing.com/</url>
 	</organization>
 
 	<developers>
@@ -39,13 +39,14 @@
 	</developers>
 
 	<scm>
-		<url>https://github.com/OSEHRA/isaac-rest-api</url>
+		<url>https://github.com/mindcomputing/knowledge-rest-api</url>
 	</scm>
 
 	<properties>
 		<isaac.version>${project.parent.version}</isaac.version>
-		<jersey.version>2.28</jersey.version>
-		<enunciate.version>2.11.1</enunciate.version>
+		<jersey.version>2.29.1</jersey.version>
+		<enunciate.version>2.12.1</enunciate.version>
+		<hapi.version>4.1.0</hapi.version>
 	</properties>
 
 	<dependencyManagement>
@@ -53,106 +54,136 @@
 			<dependency>
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-databind</artifactId>
-				<version>2.9.8</version>  <!-- We need to lock this to the version that jersey expects, rather than the version isaac tries to give us.-->
+				<version>2.9.9</version>  <!-- We need to lock this to the version that jersey-media-json-jackson expects, rather than the version isaac tries to give us.-->
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
 
 	<dependencies>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>ibdf</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>commit</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>stamp</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>chronology</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>datastore-locator</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>progress</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>coordinate</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>path</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>observable</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>query</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.provider</groupId>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
+			<artifactId>qa</artifactId>
+			<version>${isaac.version}</version>
+		</dependency>
+		<dependency>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
 			<artifactId>identifier</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.misc</groupId>
+			<groupId>sh.isaac.knowledge-core.misc</groupId>
 			<artifactId>util</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.misc</groupId>
+			<groupId>sh.isaac.knowledge-core.misc</groupId>
 			<artifactId>vhat-util</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.misc</groupId>
+			<groupId>sh.isaac.knowledge-core.misc</groupId>
 			<artifactId>associations</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.misc</groupId>
+			<groupId>sh.isaac.knowledge-core.misc</groupId>
 			<artifactId>exporters</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.misc</groupId>
+			<groupId>sh.isaac.knowledge-core.misc</groupId>
 			<artifactId>importers</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.integration</groupId>
+			<groupId>sh.isaac.knowledge-core.integration</groupId>
 			<artifactId>import-utils</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
-			<groupId>sh.isaac.integration</groupId>
+			<groupId>sh.isaac.knowledge-core.integration</groupId>
 			<artifactId>db-config-builder</artifactId>
 			<version>${isaac.version}</version>
 		</dependency>
 		<dependency>
+			<groupId>sh.isaac.knowledge-core.provider</groupId>
+			<artifactId>logic</artifactId>
+			<version>${project.parent.version}</version>
+		</dependency>
+		
+		<dependency>
 			<groupId>commons-io</groupId>
 			<artifactId>commons-io</artifactId>
 		</dependency>
+
+		<dependency>
+			<groupId>ca.uhn.hapi.fhir</groupId>
+			<artifactId>hapi-fhir-server</artifactId>
+			<version>${hapi.version}</version>
+		</dependency>
+		
+		<dependency>
+			<groupId>ca.uhn.hapi.fhir</groupId>
+			<artifactId>hapi-fhir-structures-r4</artifactId>
+			<version>${hapi.version}</version>
+			<exclusions>
+				<exclusion>
+					<groupId>xpp3</groupId>  <!-- This drags in old incompatible xml xml -->
+					<artifactId>xpp3</artifactId>
+				</exclusion>
+			</exclusions>
+		</dependency>
+		
 		<dependency>
 			<groupId>javax.xml.bind</groupId>
 			<artifactId>jaxb-api</artifactId>
@@ -199,7 +230,7 @@
 		<dependency>
 			<groupId>javax.servlet</groupId>
 			<artifactId>javax.servlet-api</artifactId>
-			<version>3.1.0</version>
+			<version>4.0.1</version>
 			<scope>provided</scope>
 		</dependency>
 
@@ -221,7 +252,7 @@
 		<dependency>
 			<groupId>org.eclipse.jetty</groupId>
 			<artifactId>jetty-servlet</artifactId>
-			<version>9.4.7.v20170914</version> <!-- Align this with the jetty version that the jersey-container-jetty brings in -->
+			<version>9.4.17.v20190418</version> <!-- Align this with the jetty version that the jersey-container-jetty brings in -->
 			<scope>test</scope>
 		</dependency>
 
@@ -242,6 +273,7 @@
 		<dependency>
 			<groupId>org.testng</groupId>
 			<artifactId>testng</artifactId>
+			<version>6.14.3</version><!-- TODO upgrade to 7, which upstream uses - some bug at the moment.  --> 
 			<scope>test</scope>
 		</dependency>
 
@@ -307,14 +339,14 @@
 							<skip>${skipTests}</skip>
 							<artifactItems>
 								<artifact>
-									<groupId>sh.isaac.core</groupId>
+									<groupId>sh.isaac.knowledge-core.core</groupId>
 									<artifactId>metadata</artifactId>
 									<version>${isaac.version}</version>
 									<classifier>all</classifier>
 									<type>ibdf.zip</type>
 								</artifact>
 								<artifact>
-									<groupId>sh.isaac.core</groupId>
+									<groupId>sh.isaac.knowledge-core.core</groupId>
 									<artifactId>metadata</artifactId>
 									<version>${isaac.version}</version>
 									<classifier>all</classifier>
@@ -379,7 +411,29 @@
 	</build>
 
 	<profiles>
+		<!-- To execute this: 'mvn -Pload-test exec:java' -->
+		<profile>
+			<id>load-test</id>
+			<build>
+				<plugins>
+					<plugin>
+						<groupId>org.codehaus.mojo</groupId>
+						<artifactId>exec-maven-plugin</artifactId>
+						<configuration>
+							<classpathScope>test</classpathScope>
+							<mainClass>net.sagebits.tmp.isaac.rest.junit.TaxonomyUnitTest</mainClass>
+							<arguments>
+								<argument>http://localhost:8080/isaac-rest/rest/</argument>
+							</arguments>
+						</configuration>
+					</plugin>
+				</plugins>
+			</build>
+		</profile>
+
 		<!-- To bring this server up, execute: 'mvn test-compile -Pstart-server' -->
+		<!-- Note - logging of headers does NOT work with this launcher, because we can't get the redirect of the java logging, because this 
+		doesn't spawn a JVM, and java logging has already been used by maven at this point.  The 'run' profile, below, does work correctly for logging headers.  -->
 		<profile>
 			<id>start-server</id>
 			<build>

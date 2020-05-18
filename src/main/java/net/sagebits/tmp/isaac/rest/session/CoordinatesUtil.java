@@ -30,6 +30,7 @@
 
 package net.sagebits.tmp.isaac.rest.session;
 
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.EnumSet;
@@ -43,6 +44,7 @@ import java.util.Set;
 import java.util.TreeMap;
 import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestException;
 import net.sagebits.tmp.isaac.rest.api1.coordinate.CoordinateAPIs;
 import net.sagebits.tmp.isaac.rest.tokens.CoordinatesToken;
@@ -652,7 +654,7 @@ public class CoordinatesUtil
 								getNestedModules(nid).forEach(value -> valuesFromParameters.add(value));
 								continue;
 							}
-							descForFail = Get.conceptDescriptionText(nid);
+							descForFail = Util.readBestDescription(nid);
 						}
 					}
 					else
@@ -668,7 +670,7 @@ public class CoordinatesUtil
 								getNestedModules(nid).forEach(value -> valuesFromParameters.add(value));
 								continue;
 							}
-							descForFail = Get.conceptDescriptionText(nid);
+							descForFail = Util.readBestDescription(nid);
 						}
 					}
 
@@ -761,21 +763,14 @@ public class CoordinatesUtil
 		else if (timeStrs.size() == 1)
 		{
 			String timeStr = timeStrs.iterator().next();
-
-			if (StringUtils.isBlank(timeStr))
+			try
 			{
-				return defaultValue;
+				long value = Util.parseDate(timeStr);
+				return value == 0 ? defaultValue : value;
 			}
-
-			Optional<Long> longTimeOptional = NumericUtils.getLong(timeStr.trim());
-			if (longTimeOptional.isPresent())
+			catch (DateTimeParseException e)
 			{
-				return longTimeOptional.get();
-			}
-
-			if (timeStr.trim().equalsIgnoreCase("latest"))
-			{
-				return Long.MAX_VALUE;
+				throw new RestException("time", "\"" + timeStrs + "\"", "invalid stamp coordinate time value");
 			}
 		}
 

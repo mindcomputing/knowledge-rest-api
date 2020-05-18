@@ -18,6 +18,8 @@ package net.sagebits.tmp.isaac.rest.session;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Properties;
+import java.util.UUID;
+import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import sh.isaac.api.util.PasswordHasher;
@@ -55,6 +57,8 @@ public class RestConfig
 	private String authURL;
 	private boolean allowAnonRead = false;
 	
+	private UUID editModule = null;
+	
 	private RestConfig()
 	{
 		init();
@@ -73,7 +77,7 @@ public class RestConfig
 			}
 			else
 			{
-				log.info("Reading PRISME configuration from uts-rest-api.properties file " + propertiesFile);
+				log.info("Reading configuration from uts-rest-api.properties file " + propertiesFile);
 				props.load(stream);
 			}
 			
@@ -93,10 +97,21 @@ public class RestConfig
 			
 			authURL = props.getProperty("auth_url", "");
 			
-			if (props.getProperty("anonymous_read") != null)
+			allowAnonRead = Boolean.parseBoolean(props.getProperty("anonymous_read", ""));
+			
+			String editModuleString = props.getProperty("edit_module", "");
+			if (StringUtils.isNotBlank(editModuleString.trim()))
 			{
-				allowAnonRead = Boolean.parseBoolean(props.getProperty("anonymous_read"));
+				try
+				{
+					editModule = UUID.fromString(editModuleString.trim());
+				}
+				catch (Exception e)
+				{
+					throw new RuntimeException("Edit module " + editModuleString + " isn't a valid UUID in uts-rest-api.properties file");
+				}
 			}
+			
 		}
 		catch (Exception e)
 		{
@@ -173,5 +188,23 @@ public class RestConfig
 	public boolean allowAnonymousRead()
 	{
 		return allowAnonRead;
+	}
+	
+	/**
+	 * Null by default
+	 * @return
+	 */
+	public UUID getEditModule()
+	{
+		return editModule;
+	}
+
+	@Override
+	public String toString()
+	{
+		return "RestConfig [artifactBaseURL=" + artifactBaseURL + ", artifactUsername=" + artifactUsername + ", artifactPassword=****"
+				+ ", dbGroupId=" + dbGroupId + ", dbArtifactId=" + dbArtifactId + ", dbVersion=" + dbVersion
+				+ ", dbClassifier=" + dbClassifier + ", gitRootURL=" + gitRootURL + ", gitUsername=" + gitUsername + ", gitPassword=****"
+				+ ", authURL=" + authURL + ", allowAnonRead=" + allowAnonRead + ", editModule=" + editModule + "]" ;
 	}
 }

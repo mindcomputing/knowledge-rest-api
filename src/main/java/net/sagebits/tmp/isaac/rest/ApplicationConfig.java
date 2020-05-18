@@ -40,7 +40,11 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.HashMap;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.logging.Level;
+import javax.net.ssl.HostnameVerifier;
+import javax.net.ssl.SSLSession;
 import javax.servlet.ServletContext;
 import javax.ws.rs.ApplicationPath;
 import javax.ws.rs.core.Context;
@@ -55,6 +59,8 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.glassfish.jersey.jackson.JacksonFeature;
+import org.glassfish.jersey.logging.LoggingFeature;
+import org.glassfish.jersey.logging.LoggingFeature.Verbosity;
 import org.glassfish.jersey.server.ResourceConfig;
 import org.glassfish.jersey.server.ServerProperties;
 import org.glassfish.jersey.server.filter.RolesAllowedDynamicFeature;
@@ -67,6 +73,8 @@ import javafx.beans.property.StringProperty;
 import javafx.concurrent.Task;
 import net.sagebits.tmp.isaac.rest.api1.RestPaths;
 import net.sagebits.tmp.isaac.rest.api1.data.RestSystemInfo;
+import net.sagebits.tmp.isaac.rest.api1.data.classifier.ClassifierRunStorage;
+import net.sagebits.tmp.isaac.rest.api1.data.release.ReleaseJobStorage;
 import net.sagebits.tmp.isaac.rest.session.RestConfig;
 import sh.isaac.MetaData;
 import sh.isaac.api.ConfigurationService;
@@ -85,6 +93,7 @@ import sh.isaac.api.util.WorkExecutors;
 import sh.isaac.convert.mojo.turtle.TurtleImportHK2Direct;
 import sh.isaac.dbConfigBuilder.artifacts.MavenArtifactUtils;
 import sh.isaac.metadata.source.IsaacMetadataAuxiliary;
+import sh.isaac.utility.Frills;
 
 @ApplicationPath(RestPaths.appPathComponent)
 public class ApplicationConfig extends ResourceConfig implements ContainerLifecycleListener
@@ -112,16 +121,19 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 	private File dbLocation;
 	private static final DateTimeFormatter fileDateTimeFormatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
 
-	// TODO we need to deal with contradictions properly whenever we pull things from a LatestVersion object. See code in RestConceptChonology
+	// TODO handle contradictions See code in RestConceptChonology
 	// for extracting the latest description.
 
 	public ApplicationConfig()
 	{
 		// If we leave everything to annotations, is picks up the eclipse moxy gson writer, which doesn't handle abstract classes properly.
 		// The goal here is to force it to use Jackson, but it seems that registering jackson disables scanning, so also have to re-enable
-		// scanning. It also seems ot forget to scan this class... so register itself..
+		// scanning. It also seems to forget to scan this class... so register itself..
 		super(new ResourceConfig().packages("net.sagebits.tmp.isaac.rest").register(JacksonFeature.class).register(ApplicationConfig.class)
-				.register(RolesAllowedDynamicFeature.class));
+				.register(RolesAllowedDynamicFeature.class)
+				.register(new LoggingFeature(java.util.logging.Logger.getLogger("Headers"), Level.FINE, Verbosity.HEADERS_ONLY, LoggingFeature.DEFAULT_MAX_ENTITY_SIZE)));
+		
+		System.setProperty("java.util.logging.manager", "org.apache.logging.log4j.jul.LogManager");
 		
 		//This is for supporting .xml and .json extensions for changing the return type
 		HashMap<String, Object> uriTypeMapProperties = new HashMap<>();
@@ -211,6 +223,7 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 		boolean testCodeRunning = "testing1234".equals(container.getConfiguration().getApplicationName());
 		
 		// context is null when run from eclipse with the local grizzly runner.
+		//However, now that we use jetty, it isn't null, so this first only executes in the testng tests
 		if (context_ == null)
 		{
 			debugMode = true;
@@ -219,12 +232,24 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 		else
 		{
 			contextPath = context_.getContextPath().replaceAll("/", "");
-			debugMode = (contextPath.contains("SNAPSHOT") ? true : false);
+			//'mainRun" is a flag in the local runner in the test package for locale eclipse runs
+			debugMode = (contextPath.contains("SNAPSHOT") || "mainRun".equals(container.getConfiguration().getApplicationName()) ? true : false);
 		}
 
 		log.info("Context path of this deployment is '" + contextPath + "' and debug mode is " + debugMode);
 
 		configureSecret();
+		
+		//Support use with self-signed certs on the gitblit server
+		//TODO remove this, when we have proper certs...
+		javax.net.ssl.HttpsURLConnection.setDefaultHostnameVerifier(new HostnameVerifier()
+		{
+			@Override
+			public boolean verify(String hostname, SSLSession sslSession)
+			{
+				return true;
+			}
+		});
 
 		issacInit();
 	}
@@ -291,10 +316,13 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 						String databaseRootLocation = System.getProperty(DATA_STORE_ROOT_LOCATION_PROPERTY);
 						if (StringUtils.isBlank(databaseRootLocation) || !Files.isDirectory(Paths.get(databaseRootLocation)))
 						{
+							log.debug("{} is " + (StringUtils.isBlank(databaseRootLocation) ? "is not set" : "is not a folder"), DATA_STORE_ROOT_LOCATION_PROPERTY);
 							// if there isn't an official system property set, check this one or if the directory does not exist
 							String sysProp = System.getProperty("isaacDatabaseLocation");
 							if (StringUtils.isBlank(sysProp) || !Files.isDirectory(Paths.get(sysProp)))
 							{
+								log.debug("isaacDatabaseLocation is " + (StringUtils.isBlank(sysProp) ? "is not set" : "is not a folder") + ", will use {}", 
+										RestConfig.getInstance().toString());
 								// No ISAAC default property set, nor the isaacDatabaseLocation property is set. If we have coordinates
 								// for a DB, lets download it.
 								if (StringUtils.isNotBlank(RestConfig.getInstance().getDbArtifactId()))
@@ -315,6 +343,7 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 								else
 								{
 									//No coordinates, we will just create a simple metadata-only DB
+									log.info("No config available.  Creating default metadata only DB");
 									dbLocation = new File(System.getProperty("java.io.tmpdir"), "UTS." + contextPath + ".data");
 									RecursiveDelete.delete(dbLocation);
 									dbLocation.mkdirs();
@@ -324,6 +353,7 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 							else
 							{
 								dbLocation = new File(sysProp);
+								log.debug("using system property 'isaacDatabaseLocation' of {}", dbLocation);
 							}
 
 							if (shutdown)
@@ -448,9 +478,30 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 							}
 						}
 
+						log.info("Executing cleanup pass on classifier status runs and release job runs");
+						ClassifierRunStorage.cleanAbandoned();
+						ReleaseJobStorage.cleanAbandoned();
+						
+						UUID editModule = rc.getEditModule();
+						if (editModule != null)
+						{
+							if (Get.identifierService().hasUuid(editModule) && Get.conceptService().hasConcept(Get.nidForUuids(editModule)))
+							{
+								int editModuleNid = Frills.createAndGetDefaultEditModule(Get.nidForUuids(editModule));
+								Get.configurationService().getGlobalDatastoreConfiguration().setDefaultEditModule(editModuleNid);
+								log.info("Default edit module set to {} per the properties file", Get.concept(editModuleNid).toExternalString());
+							}
+							else
+							{
+								log.warn("Specified edit module {} in the properties file does not exist, and will be ignored", editModule);
+							}
+						}
+						
+						log.info("Default edit coordinate is {}", Get.configurationService().getGlobalDatastoreConfiguration().getDefaultEditCoordinate().toString());
+						
 						systemInfo_ = new RestSystemInfo();
 						log.info(systemInfo_.toString());
-
+						
 						status_.set("Ready");
 						System.out.println("Done setting up ISAAC");
 
@@ -582,11 +633,9 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 		File tempDbFolder = null;
 		try
 		{
-			log.info("Checking for existing DB");
-
 			File targetDBLocation = new File(System.getProperty("java.io.tmpdir"), "UTS." + contextPath + ".db");
-
 			RestConfig rc = RestConfig.getInstance();
+			log.info("Checking for existing DB in folder {}, looking for config: {}", targetDBLocation.toString(), rc.toString());
 			
 			if (targetDBLocation.isDirectory())
 			{
@@ -601,6 +650,10 @@ public class ApplicationConfig extends ResourceConfig implements ContainerLifecy
 					log.warn("Removing existing db because consistency validation failed");
 					FileUtils.deleteDirectory(targetDBLocation);
 				}
+			}
+			else
+			{
+				log.info("{} is not a directory", targetDBLocation.toString());
 			}
 
 			tempDbFolder = File.createTempFile("UTS-DATA", "");

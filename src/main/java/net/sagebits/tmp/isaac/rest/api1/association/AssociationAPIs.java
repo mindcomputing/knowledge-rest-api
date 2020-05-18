@@ -205,7 +205,7 @@ public class AssociationAPIs
 				total.incrementAndGet();
 				try
 				{
-					LatestVersion<DynamicVersion<?>> latest = associationC.getLatestVersion(RequestInfo.get().getStampCoordinate());
+					LatestVersion<DynamicVersion> latest = associationC.getLatestVersion(RequestInfo.get().getStampCoordinate());
 					if (latest.isPresent())
 					{
 						if (total.get() <= start || results.size() >= maxPageSize)

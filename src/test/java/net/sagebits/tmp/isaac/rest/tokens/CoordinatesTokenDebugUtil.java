@@ -30,7 +30,7 @@
 
 package net.sagebits.tmp.isaac.rest.tokens;
 
-import sh.isaac.api.Get;
+import net.sagebits.tmp.isaac.rest.Util;
 
 /**
  * 
@@ -60,7 +60,7 @@ class CoordinatesTokenDebugUtil
 			{
 				sb.append(',');
 			}
-			sb.append(Get.conceptDescriptionText(nids[i]));
+			sb.append(Util.readBestDescription(nids[i]));
 		}
 
 		sb.append("]");
@@ -70,13 +70,13 @@ class CoordinatesTokenDebugUtil
 
 	public static String toString(CoordinatesToken token)
 	{
-		return "CoordinatesToken [getStampTime()=" + token.getStampTime() + ", getStampPath()=" + Get.conceptDescriptionText(token.getStampPath())
+		return "CoordinatesToken [getStampTime()=" + token.getStampTime() + ", getStampPath()=" + Util.readBestDescription(token.getStampPath())
 				+ ", getStampPrecedence()=" + token.getStampPrecedence() + ", getStampModules()=" + token.getStampModules() + ", getStampStates()="
-				+ token.getStampStates() + ", getLangCoord()=" + Get.conceptDescriptionText(token.getLangCoord()) + ", getLangDialects()="
+				+ token.getStampStates() + ", getLangCoord()=" + Util.readBestDescription(token.getLangCoord()) + ", getLangDialects()="
 				+ conceptsToString(token.getLangDialects()) + ", getLangDescTypePrefs()=" + conceptsToString(token.getLangDescTypePrefs())
 				+ ", getTaxonomyType()=" + token.getTaxonomyType() + ", getLogicStatedAssemblage()="
-				+ Get.conceptDescriptionText(token.getLogicStatedAssemblage()) + ", getLogicInferredAssemblage()="
-				+ Get.conceptDescriptionText(token.getLogicInferredAssemblage()) + ", getLogicDescLogicProfile()=" + token.getLogicDescLogicProfile()
-				+ ", getLogicClassifier()=" + Get.conceptDescriptionText(token.getLogicClassifier()) + ", getSerialized()=" + token.getSerialized() + "]";
+				+ Util.readBestDescription(token.getLogicStatedAssemblage()) + ", getLogicInferredAssemblage()="
+				+ Util.readBestDescription(token.getLogicInferredAssemblage()) + ", getLogicDescLogicProfile()=" + token.getLogicDescLogicProfile()
+				+ ", getLogicClassifier()=" + Util.readBestDescription(token.getLogicClassifier()) + ", getSerialized()=" + token.getSerialized() + "]";
 	}
 }

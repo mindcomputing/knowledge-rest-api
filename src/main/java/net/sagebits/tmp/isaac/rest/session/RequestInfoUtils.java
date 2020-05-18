@@ -120,14 +120,14 @@ public class RequestInfoUtils
 		}
 	}
 
-	public static int getNidFromParameter(String parameterName, String str) throws RestException
+	public static int getNidFromParameter(String parameterName, String parameterValue) throws RestException
 	{
 		try
 		{
 			UUID uuid = null;
 			try
 			{
-				uuid = UUID.fromString(str);
+				uuid = UUID.fromString(parameterValue);
 
 				if (Get.identifierService().hasUuid(uuid))
 				{
@@ -147,7 +147,7 @@ public class RequestInfoUtils
 				}
 				else
 				{
-					throw new RestException(parameterName, str, "no concept or semantic exists corresponding to parameter");
+					throw new RestException(parameterName, parameterValue, "no concept or semantic exists corresponding to parameter");
 				}
 			}
 			catch (RestException ex)
@@ -158,10 +158,10 @@ public class RequestInfoUtils
 			{
 				// ignore
 			}
-			int id = Integer.parseInt(str);
+			int id = Integer.parseInt(parameterValue);
 			if (!Get.conceptService().hasConcept(id) && !Get.assemblageService().hasSemantic(id))
 			{
-				throw new RestException(parameterName, str, "no concept or semantic exists corresponding to " + parameterName + " parameter value: " + str);
+				throw new RestException(parameterName, parameterValue, "no concept or semantic exists corresponding to " + parameterName + " parameter value: " + parameterValue);
 			}
 			else
 			{
@@ -174,24 +174,24 @@ public class RequestInfoUtils
 		}
 		catch (Exception e)
 		{
-			throw new RestException(parameterName, str, "invalid " + parameterName + " parameter value: " + str);
+			throw new RestException(parameterName, parameterValue, "invalid " + parameterName + " parameter value: " + parameterValue);
 		}
 	}
 
 	/**
 	 * Same as {@link #getNidFromParameter(String, String)} except it validates it is a concept.
 	 * @param parameterName 
-	 * @param str 
+	 * @param parameterValue 
 	 * @return  the nid
 	 * 
 	 * @throws RestException
 	 */
-	public static int getConceptNidFromParameter(String parameterName, String str) throws RestException
+	public static int getConceptNidFromParameter(String parameterName, String parameterValue) throws RestException
 	{
-		int nid = getNidFromParameter(parameterName, str);
+		int nid = getNidFromParameter(parameterName, parameterValue);
 		if (!Get.conceptService().hasConcept(nid))
 		{
-			throw new RestException(parameterName, str, "The supplied identifier " + parameterName + " - " + str
+			throw new RestException(parameterName, parameterValue, "The supplied identifier " + parameterName + " - " + parameterValue
 					+ " does not correspond to a concept, perhaps it is a semantic, or it may not be loaded.");
 		}
 		return nid;

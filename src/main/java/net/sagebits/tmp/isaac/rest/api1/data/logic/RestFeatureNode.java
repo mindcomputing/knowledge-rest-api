@@ -33,6 +33,7 @@ package net.sagebits.tmp.isaac.rest.api1.data.logic;
 import javax.xml.bind.annotation.XmlElement;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import net.sagebits.tmp.isaac.rest.ExpandUtil;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
 import net.sagebits.tmp.isaac.rest.api1.data.concept.RestConceptVersion;
 import net.sagebits.tmp.isaac.rest.api1.data.enumerations.RestConcreteDomainOperatorsType;
@@ -42,10 +43,13 @@ import sh.isaac.api.chronicle.LatestVersion;
 import sh.isaac.api.component.concept.ConceptChronology;
 import sh.isaac.api.component.concept.ConceptVersion;
 import sh.isaac.api.coordinate.ManifoldCoordinate;
+import sh.isaac.api.coordinate.StampCoordinate;
 import sh.isaac.api.logic.NodeSemantic;
+import sh.isaac.model.coordinate.ManifoldCoordinateImpl;
 import sh.isaac.model.logic.ConcreteDomainOperators;
 import sh.isaac.model.logic.node.external.FeatureNodeWithUuids;
 import sh.isaac.model.logic.node.internal.FeatureNodeWithNids;
+import sh.isaac.utility.Frills;
 
 /**
  * 
@@ -88,6 +92,14 @@ public class RestFeatureNode extends RestTypedConnectorNode
 	 */
 	@XmlElement
 	RestConceptVersion measureSemanticConceptVersion;
+	
+	/**
+	 * The String text description of the measureSemanticConcept. It is included as a convenience, as it may be retrieved
+	 * based on the concept nid.  This may be null depending on the stamps involved in the request if no description is available 
+	 * on the given path.
+	 */
+	@XmlElement
+	public String measureDescription;
 
 	protected RestFeatureNode()
 	{
@@ -118,14 +130,38 @@ public class RestFeatureNode extends RestTypedConnectorNode
 	{
 		operator = new RestConcreteDomainOperatorsType(cdo);
 		measureSemanticConcept = new RestIdentifiedObject(msc);
+		Get.conceptService().getSnapshot(coordForRead).getDescriptionOptional(measureSemanticConcept.nid).ifPresent(dv -> measureDescription = dv.getText());
 
 		if (RequestInfo.get().shouldExpand(ExpandUtil.versionExpandable))
 		{
 			LatestVersion<ConceptVersion> olcv = msc.getLatestVersion(coordForRead.getStampCoordinate());
 			// TODO handle contradictions
-			measureSemanticConceptVersion = new RestConceptVersion(olcv.get(), true, RequestInfo.get().shouldExpand(ExpandUtil.includeParents),
+			
+			if (olcv.isAbsent() && Frills.isMetadata(msc.getNid()))
+			{
+				LOG.info("Using latest version stamp to read metadata measure type concept");
+				//Use latest for metadata, cause its often newer, but we pretty much always need it in the graph refs.
+				StampCoordinate tweakedCoord = coordForRead.makeCoordinateAnalog(Long.MAX_VALUE);
+				olcv = msc.getLatestVersion(tweakedCoord);
+				
+				//If the concept wasn't present, the description will be bad too.
+				Get.conceptService().getSnapshot(new ManifoldCoordinateImpl(tweakedCoord, coordForRead.getLanguageCoordinate()))
+					.getDescriptionOptional(measureSemanticConcept.nid).ifPresent(dv -> measureDescription = dv.getDescriptionType())
+					.ifAbsent(() -> measureDescription = Util.readBestDescription(measureSemanticConcept.nid));
+
+			}
+			
+			if (olcv.isPresent())
+			{
+				measureSemanticConceptVersion = new RestConceptVersion(olcv.get(), true, RequestInfo.get().shouldExpand(ExpandUtil.includeParents),
 					RequestInfo.get().shouldExpand(ExpandUtil.countParents),
 					false, false, RequestInfo.get().getStated(), false, RequestInfo.get().shouldExpand(ExpandUtil.terminologyType), false);
+			}
+			else
+			{
+				LOG.info("No version of measure {} present at {} coordinate", measureSemanticConcept, coordForRead);
+				connectorTypeConceptVersion = null;
+			}
 		}
 		else
 		{

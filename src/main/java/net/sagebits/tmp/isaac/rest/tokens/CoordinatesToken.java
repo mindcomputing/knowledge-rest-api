@@ -33,10 +33,11 @@ package net.sagebits.tmp.isaac.rest.tokens;
 import java.util.Arrays;
 import java.util.Base64;
 import java.util.EnumSet;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import net.sagebits.tmp.isaac.rest.ApplicationConfig;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestException;
+import sh.isaac.MetaData;
 import sh.isaac.api.Status;
 import sh.isaac.api.bootstrap.TermAux;
 import sh.isaac.api.collections.NidSet;
@@ -64,7 +65,7 @@ import sh.isaac.model.coordinate.StampPositionImpl;
  */
 public class CoordinatesToken
 {
-	private static final transient Logger log = LoggerFactory.getLogger(CoordinatesToken.class);
+	private static final transient Logger log = LogManager.getLogger(CoordinatesToken.class);
 
 	private static final byte tokenVersion = 1;
 	private static final int hashRounds = 128;
@@ -189,7 +190,7 @@ public class CoordinatesToken
 
 			if (!readHash.equals(calculatedHash))
 			{
-				throw new RestException("Invalid token!");
+				throw new RestException("Invalid coordinate token!");
 			}
 
 			byte[] readBytes = Base64.getUrlDecoder().decode(serialization.substring(encodedHashLength, serialization.length()));
@@ -273,6 +274,15 @@ public class CoordinatesToken
 		{
 			languageCoordinate = new LanguageCoordinateImpl(langCoord, langDialects, 
 					LanguageCoordinates.expandDescriptionTypePreferenceList(ArrayUtil.toSpecificationArray(langDescTypePrefs), null));
+			
+			if (langCoord != MetaData.ENGLISH_LANGUAGE____SOLOR.getNid())
+			{
+				//Add a next priority cood of english, as a fallback, so the world doesn't break if you select russian in the GUI prefs
+				((LanguageCoordinateImpl)languageCoordinate).setNextProrityLanguageCoordinate(
+						new LanguageCoordinateImpl(MetaData.ENGLISH_LANGUAGE____SOLOR.getNid(), 
+								new int[] {MetaData.US_ENGLISH_DIALECT____SOLOR.getNid(), MetaData.GB_ENGLISH_DIALECT____SOLOR.getNid()}, 
+					LanguageCoordinates.expandDescriptionTypePreferenceList(ArrayUtil.toSpecificationArray(langDescTypePrefs), null)));
+			}
 		}
 
 		return languageCoordinate;

@@ -33,6 +33,7 @@ package net.sagebits.tmp.isaac.rest.session;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import javax.inject.Singleton;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -70,11 +71,17 @@ class RestUserServiceSelector implements RestUserService
 	}
 
 	/**
-	 * @see net.sagebits.tmp.isaac.rest.session.RestUserService#getUser(java.util.Map, net.sagebits.tmp.isaac.rest.tokens.EditToken)
+	 * @see net.sagebits.tmp.isaac.rest.session.RestUserService#getUser(Map, EditToken, Function)
 	 */
 	@Override
-	public Optional<RestUser> getUser(Map<String, List<String>> requestParameters, EditToken editToken) throws RestException
+	public Optional<RestUser> getUser(Map<String, List<String>> requestParameters, EditToken editToken, Function<String, Optional<String>> cookieValueProvider) throws RestException
 	{
-		return impl.getUser(requestParameters, editToken);
+		return impl.getUser(requestParameters, editToken, cookieValueProvider);
+	}
+
+	@Override
+	public void clearCache()
+	{
+		impl.clearCache();
 	}
 }

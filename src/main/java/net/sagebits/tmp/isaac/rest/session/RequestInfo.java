@@ -42,6 +42,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Function;
+import javax.ws.rs.container.ContainerRequestContext;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import net.sagebits.tmp.isaac.rest.ApplicationConfig;
@@ -55,10 +57,8 @@ import net.sagebits.tmp.isaac.rest.tokens.EditToken;
 import net.sagebits.uts.auth.data.User;
 import net.sagebits.uts.auth.data.UserRole;
 import net.sagebits.uts.auth.rest.api1.data.RestUser;
-import sh.isaac.MetaData;
 import sh.isaac.api.Get;
 import sh.isaac.api.Status;
-import sh.isaac.api.bootstrap.TermAux;
 import sh.isaac.api.collections.NidSet;
 import sh.isaac.api.coordinate.EditCoordinate;
 import sh.isaac.api.coordinate.LanguageCoordinate;
@@ -67,9 +67,6 @@ import sh.isaac.api.coordinate.ManifoldCoordinate;
 import sh.isaac.api.coordinate.PremiseType;
 import sh.isaac.api.coordinate.StampCoordinate;
 import sh.isaac.api.coordinate.StampPrecedence;
-import sh.isaac.api.util.UuidT5Generator;
-import sh.isaac.model.coordinate.EditCoordinateImpl;
-import sh.isaac.utility.Frills;
 
 /**
  * {@link RequestInfo}
@@ -83,8 +80,6 @@ import sh.isaac.utility.Frills;
 public class RequestInfo
 {
 	private static Logger log = LogManager.getLogger(RequestInfo.class);
-
-	private static EditCoordinate DEFAULT_EDIT_COORDINATE = null;
 	
 	private static AtomicLong requestIdInc = new AtomicLong();
 
@@ -99,6 +94,10 @@ public class RequestInfo
 	private List <RestSupportedIdType> requestedAdditionalIds_ = new ArrayList<>();
 
 	private EditCoordinate editCoordinate_ = null;
+	
+	private ContainerRequestContext context_;
+	
+	private String authFail_;
 
 	// just a cache
 //	private static WorkflowProvider wfp_;
@@ -106,18 +105,6 @@ public class RequestInfo
 	private Set<String> expandablesForDirectExpansion_ = new HashSet<>(0);
 	// Default to this, users may override by specifying expandables=true
 	private boolean returnExpandableLinks_ = ApplicationConfig.getInstance().isDebugDeploy();
-
-	public static EditCoordinate getDefaultEditCoordinate()
-	{
-		if (DEFAULT_EDIT_COORDINATE == null)
-		{
-			DEFAULT_EDIT_COORDINATE = new EditCoordinateImpl(MetaData.USER____SOLOR.getNid(), 
-					Frills.createAndGetDefaultEditModule(MetaData.SNOMED_CT_CORE_MODULES____SOLOR.getNid()),
-					TermAux.DEVELOPMENT_PATH.getNid());
-			CoordinatesUtil.clearCache();
-		}
-		return DEFAULT_EDIT_COORDINATE;
-	}
 
 	private static final ThreadLocal<RequestInfo> requestInfo = new ThreadLocal<RequestInfo>()
 	{
@@ -135,14 +122,18 @@ public class RequestInfo
 
 	private RequestInfo()
 	{
+		//TODO change these log statements down to a trace, after I figure out a bug I've seen a couple of times, that 
+		//seems to indicate I have some path through the code that creates (but doesn't clear) a request info
 		createTime_ = System.currentTimeMillis();
-		requestId_ = requestIdInc.getAndIncrement();
+		requestId_ = requestIdInc.incrementAndGet();
+		log.debug("Thread-Local request info inited for request {}", requestId_);
 	}
 
 	public static RequestInfo remove()
 	{
 		RequestInfo ri = requestInfo.get();
 		requestInfo.remove();
+		log.debug("Thread-Local request info cleared for request {}", ri.requestId_);
 		return ri;
 	}
 
@@ -194,10 +185,11 @@ public class RequestInfo
 	 * This populates the user for the request, if possible.
 	 * @param parameters
 	 * @param path 
+	 * @param cookieValueProvider function to provide the value of a named cookie (if cookie present)
 	 * @return
 	 * @throws Exception
 	 */
-	public RequestInfo readAll(Map<String, List<String>> parameters, String path) throws Exception
+	public RequestInfo readAll(Map<String, List<String>> parameters, String path, Function<String, Optional<String>> cookieValueProvider) throws Exception
 	{
 		parameters_.clear();
 		for (Map.Entry<String, List<String>> entry : parameters.entrySet())
@@ -206,7 +198,7 @@ public class RequestInfo
 		}
 		
 		//populate the user, if possible, and the editToken, if possible (only when an encoded token is provided)
-		user_ = Get.service(RestUserService.class).getUser(parameters_, getEditToken());
+		user_ = Get.service(RestUserService.class).getUser(parameters_, getEditToken(), cookieValueProvider);
 		
 		if (!user_.isPresent())
 		{
@@ -216,7 +208,7 @@ public class RequestInfo
 			{
 				log.info("Generating a read-only user for system info read");
 				user_ = Optional.of(
-						new RestUser(new User(UuidT5Generator.get(UuidT5Generator.PATH_ID_FROM_FS_DESC, "INFO-READ"), "INFO-READ", "system info read", 
+						new RestUser(new User(User.ANON_READ_ID, "INFO-READ", "system info read", 
 								new UserRole[] { UserRole.READ }, null), null, false));
 			}
 		}
@@ -468,7 +460,7 @@ public class RequestInfo
 			{
 				throw new RestException("No edit token was passed, edit coordinate is unavailable");
 			}
-			editCoordinate_ = new EditCoordinateImpl(getEditToken().getAuthorNid(), getEditToken().getModuleNid(), getEditToken().getPathNid());
+			editCoordinate_ = getEditToken().getEditCoordinate();
 		}
 
 		return editCoordinate_;
@@ -560,5 +552,31 @@ public class RequestInfo
 	public List<RestSupportedIdType> getRequestedAdditionalIds()
 	{
 		return requestedAdditionalIds_;
+	}
+	
+	//Storing the context is a hack, because we can't seem to get the context via injection during testing... and this is easier
+	//that some of the other hacks I've seen..
+	public void setContext(ContainerRequestContext context)
+	{
+		if (context_ != null)
+		{
+			log.warn("Context should only be set once");
+		}
+		context_ = context;
+	}
+	
+	public ContainerRequestContext getContext()
+	{
+		return context_;
+	}
+	
+	public void setAuthFail(String message)
+	{
+		authFail_ = message;
+	}
+	
+	public String getAuthFailReason()
+	{
+		return authFail_;
 	}
 }

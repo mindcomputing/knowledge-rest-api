@@ -136,7 +136,7 @@ public class RestSearchResult
 		this.matchNid = matchNid;
 		this.matchText = matchText;
 		this.score = score;
-		this.active = (state == Status.ACTIVE);
+		this.active = state.isActive();
 
 		expandables = new Expandables();
 		if (RequestInfo.get().shouldExpand(ExpandUtil.uuid))
@@ -174,7 +174,7 @@ public class RestSearchResult
 						RequestInfo.get().shouldExpand(ExpandUtil.versionsLatestOnlyExpandable), 
 						RequestInfo.get().shouldExpand(ExpandUtil.includeParents),
 						RequestInfo.get().shouldExpand(ExpandUtil.countParents),
-						true, null, 
+						RequestInfo.get().shouldExpand(ExpandUtil.terminologyType), null, 
 						RequestInfo.get().getManifoldCoordinate().getTaxonomyPremiseType() == PremiseType.STATED);
 				if (RequestInfo.get().returnExpandableLinks())
 				{

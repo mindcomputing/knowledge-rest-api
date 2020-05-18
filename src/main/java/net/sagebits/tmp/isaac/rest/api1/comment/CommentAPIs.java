@@ -93,7 +93,7 @@ public class CommentAPIs
 		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.id, RequestParameters.COORDINATE_PARAM_NAMES);
 
 		SemanticChronology sc = SemanticAPIs.findSemanticChronology(id);
-		LatestVersion<DynamicVersion<?>> sv = sc.getLatestVersion(RequestInfo.get().getStampCoordinate());
+		LatestVersion<DynamicVersion> sv = sc.getLatestVersion(RequestInfo.get().getStampCoordinate());
 		if (sv.isPresent())
 		{
 			// TODO handle contradictions

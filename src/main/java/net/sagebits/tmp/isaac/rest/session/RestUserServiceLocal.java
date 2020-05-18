@@ -35,9 +35,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Function;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import net.sagebits.tmp.isaac.rest.ApplicationConfig;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestException;
 import net.sagebits.tmp.isaac.rest.tokens.EditToken;
 import net.sagebits.uts.auth.data.SSOToken;
@@ -47,14 +49,13 @@ import net.sagebits.uts.auth.rest.api1.data.RestUser;
 import net.sagebits.uts.auth.rest.session.AuthRequestParameters;
 import net.sagebits.uts.auth.users.UserService;
 import sh.isaac.api.Get;
-import sh.isaac.api.util.UuidT5Generator;
 
 /**
  * 
  * {@link RestUserServiceLocal}
  *
  * This implementation of the {@link RestUserService} is for testing and simple deployments, and does lookups against
- * a local user store.
+ * a local user store.  It does NOT currently support service tokens.
  *
  * @author <a href="mailto:daniel.armbrust.list@gmail.com">Dan Armbrust</a>
  */
@@ -71,7 +72,8 @@ public class RestUserServiceLocal implements RestUserService
 		//for RestUserServiceSelector
 		
 		File tempDirName = new File(System.getProperty("java.io.tmpdir"));
-		File userStore = new File(tempDirName, ApplicationConfig.getInstance().getContextPath() + "-users.json");
+		File userStore = new File(tempDirName, "auth-users-" + ApplicationConfig.getInstance().getContextPath());
+		userStore.mkdirs();
 		
 		us = new UserService(userStore, true);
 		dbID = Get.dataStore().getDataStoreId().get();
@@ -84,23 +86,32 @@ public class RestUserServiceLocal implements RestUserService
 	 * @see net.sagebits.tmp.isaac.rest.session.RestUserService#getUser(java.util.Map, net.sagebits.tmp.isaac.rest.tokens.EditToken)
 	 */
 	@Override
-	public Optional<RestUser> getUser(Map<String, List<String>> requestParameters, EditToken editToken) throws RestException
+	public Optional<RestUser> getUser(Map<String, List<String>> requestParameters, EditToken editToken, Function<String, Optional<String>> cookieValueProvider) throws RestException
 	{
 		Optional<User> user = Optional.empty();
-		if (requestParameters.containsKey(AuthRequestParameters.ssoToken))
+		if (requestParameters.containsKey(AuthRequestParameters.ssoToken) || cookieValueProvider.apply(SSOToken.cookieName).isPresent())
 		{
 			try
 			{
-				SSOToken st = new SSOToken(requestParameters.get(AuthRequestParameters.ssoToken).get(0));
+				SSOToken st = new SSOToken(cookieValueProvider.apply(SSOToken.cookieName).orElse(requestParameters.get(AuthRequestParameters.ssoToken).get(0)));
 				user = us.getUser(st.getUser());
 				if (!user.isPresent())
 				{
 					log.error("Valid SSO token but no user for user id {}?" , st.getUser());
 				}
+				else if (!user.get().isEnabled())
+				{
+					throw new SecurityException("The user tied to the passed SSO token is disabled");
+				}
+				else if (st.getUserLogOutCount() != user.get().getLogoutCount())
+				{
+					//They have logged out since this token was issued, this one is invalid
+					throw new SecurityException("The user logged out after this SSO token was issued");
+				}
 			}
 			catch (Exception e)
 			{
-				throw new RestException(e.getMessage());
+				throw new SecurityException(e.getMessage());
 			}
 		}
 		
@@ -109,7 +120,7 @@ public class RestUserServiceLocal implements RestUserService
 			//Local Auth
 			if (!requestParameters.containsKey(AuthRequestParameters.password))
 			{
-				throw new RestException("If 'userName' or 'email' is provided, then 'password' must be provided as well");
+				throw new SecurityException("If 'userName' or 'email' is provided, then 'password' must be provided as well");
 			}
 			
 			Optional<User> oUser = us.findUser(RequestInfoUtils.getFirstParameterValue(requestParameters, AuthRequestParameters.userName), 
@@ -117,18 +128,22 @@ public class RestUserServiceLocal implements RestUserService
 			
 			if (oUser.isPresent())
 			{
-				if (oUser.get().validatePassword(requestParameters.get(AuthRequestParameters.password).get(0).toCharArray()))
+				if (!oUser.get().isEnabled())
+				{
+					throw new SecurityException("User account disabled");
+				}
+				else if (oUser.get().validatePassword(requestParameters.get(AuthRequestParameters.password).get(0).toCharArray()))
 				{
 					user = oUser;
 				}
 				else
 				{
-					throw new RestException("Invalid user information");
+					throw new SecurityException("Invalid user information - auth fail");
 				}
 			}
 			else
 			{
-				throw new RestException("Invalid user information");
+				throw new SecurityException("Invalid user information");
 			}
 		}
 		
@@ -137,13 +152,20 @@ public class RestUserServiceLocal implements RestUserService
 			if (user.isPresent())
 			{
 				//the nid in the editToken better align with the RestUser info
-				if (Get.identifierService().getNidForUuids(user.get().getId()) != editToken.getAuthorNid())
+				if (!Get.identifierService().hasUuid(user.get().getId()))
+				{
+					log.warn("User id came in as {}:{} while the editToken has a user of {}:{}", 
+							user.get().getId(), user.get().getUserName(), 
+							editToken.getAuthorNid(), Util.readBestDescription(editToken.getAuthorNid()));
+					throw new SecurityException("Mis-aligned editToken / authentication information");
+				}
+				else if (Get.identifierService().getNidForUuids(user.get().getId()) != editToken.getAuthorNid())
 				{
 					log.warn("User id came in as {}:{}:{} while the editToken has a user of {}:{}", user.get().getId(), 
 							Get.identifierService().getNidForUuids(user.get().getId()), 
-							Get.conceptDescriptionText(Get.identifierService().getNidForUuids(user.get().getId())),
-							editToken.getAuthorNid(), Get.conceptDescriptionText(editToken.getAuthorNid()));
-					throw new RestException("Mis-aligned editToken / authentication information");
+							Util.readBestDescription(Get.identifierService().getNidForUuids(user.get().getId())),
+							editToken.getAuthorNid(), Util.readBestDescription(editToken.getAuthorNid()));
+					throw new SecurityException("Mis-aligned editToken / authentication information");
 				}
 			}
 			else
@@ -153,11 +175,11 @@ public class RestUserServiceLocal implements RestUserService
 			}
 		}
 		
-		if (!user.isPresent() && (ApplicationConfig.getInstance().isDebugDeploy() || RestConfig.getInstance().allowAnonymousRead()))
+		if (!user.isPresent() && RestConfig.getInstance().allowAnonymousRead())
 		{
 			//provide a read role for ease of testing / debug
-			log.info("Generating a random read-only user for test, since debug mode is enabled");
-			user = Optional.of(new User(UuidT5Generator.get(UuidT5Generator.PATH_ID_FROM_FS_DESC, "ReadOnly"), "ReadOnly", "Read Only", 
+			log.info("Generating a random read-only user for test, since anon read is enabled");
+			user = Optional.of(new User(User.ANON_READ_ID, "ReadOnly", "Read Only", 
 					new UserRole[] {UserRole.READ}, null));
 		}
 		
@@ -173,5 +195,12 @@ public class RestUserServiceLocal implements RestUserService
 			}
 		}
 		return ru;
+	}
+
+
+	@Override
+	public void clearCache()
+	{
+		// noop
 	}
 }

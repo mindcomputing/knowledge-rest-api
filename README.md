@@ -3,29 +3,29 @@
 Simplified ISAAC APIs for REST access
 
 ### Support:
-This implementation is provided and supported by VetsEZ (Veterans EZ Info, Inc.) in combination with Sagebits LLC.
-This implementation only supports READ APIs.   
+This implementation is provided and supported by Mind Computing in combination with Sagebits LLC.
+This implementation only supports READ APIs.
 As part of our suite of terminology offerings, we also have an extended version that supports WRITE APIs, in addition 
-to a full graphical web-based editor.
+to a full graphical web-based editor, and FHIR APIs.
 
-Reach out to us at contact@vetsez.com, https://vetsez.com/ for more details.
+Reach out to us at contact@mindcomputing.com, https://mindcomputing.com/products/ for more details.
 
 ### Building
-This code has a dependency on https://github.com/OSEHRA/ISAAC
+This code has a dependency on https://github.com/mindcomputing/knowledge-core
 
-The develop branch of this code tracks the develop-fx11 branch of ISAAC, so to build this code, you must first check out, and do a 'mvn install' on the develop-fx11 branch 
-of ISAAC.  This branch is for Java 11.  Java 8 support was retired, there is a tag named 'retired/jdk8' with the last of the code that supported JDK 8.
+This code requires Java 11.
 
-After you have built ISAAC, and installed it into your local repository, then you can build this code with maven.  'mvn clean package' will get you a deployable war file.
+After you have built knowledge-core, and installed it into your local maven repository, then you can build this code with maven.  'mvn clean package' will get you a 
+deployable war file.
 
 ### Launching:
-- To run in Eclipse, execute the class net.sagebits.tmp.isaac.rest.LocalGrizzlyRunner.  You may optionally set a system property called -DisaacDatabaseLocation pointing 
+- To run in Eclipse, execute the class net.sagebits.tmp.isaac.rest.LocalServerRunner.  You may optionally set a system property called -DisaacDatabaseLocation pointing 
 to the location of the .data file. For example, on my system the path is -DisaacDatabaseLocation=c:\temp\database\vhat-2016.01.07-1.0-SNAPSHOT-all.data. 
 In Eclipse, put this in the VM Argument tab under the Run Configurations menu.
 
 To have it download a particular DB during the startup sequence, edit the file
 ```
-isaac-rest\src\test\resources\uts-rest-api.properties
+knowledge-rest-api\src\test\resources\uts-rest-api.properties
 ```
 and specify the "nexus_..." parameters, and the "db_..." parameters.  If the 'nexus_pwd' parameter is encrypted, then place the decryption password in a file named:
 ```
@@ -44,10 +44,10 @@ mvn -Prun exec:exec
 ```
 
 ### Helping with development
-This code may be found on several git servers, however, if you have additions, please submit them as pull requests to to https://github.com/OSEHRA/isaac-rest-api/pulls
+Please submit enhancements as pull requests to to https://github.com/mindcomputing/knowledge-rest-api/pulls
 
 ### Bug tracker
-You may file bugs at https://github.com/OSEHRA/isaac-rest-api/issues
+You may file bugs at https://github.com/mindcomputing/knowledge-rest-api/issues
 
 ### To enable reading content from an additional maven repo during a bitbucket pipelines run, set the environment variables:
 ```

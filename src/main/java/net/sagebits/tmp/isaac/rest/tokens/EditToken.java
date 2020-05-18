@@ -40,8 +40,8 @@ import java.util.Map.Entry;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestException;
 import net.sagebits.uts.auth.rest.api1.data.RestUser;
 import sh.isaac.api.Get;
@@ -58,7 +58,7 @@ import sh.isaac.model.coordinate.EditCoordinateImpl;
  */
 public class EditToken
 {
-	private static final Logger log = LoggerFactory.getLogger(EditToken.class);
+	private static final Logger log = LogManager.getLogger(EditToken.class);
 
 	private static final byte tokenVersion = 2;
 	private static final int hashRounds = 2048;
@@ -150,14 +150,14 @@ public class EditToken
 			long time = System.currentTimeMillis();
 			if (encodedData.length() < encodedHashLength)
 			{
-				throw new RestException("Invalid edit token");
+				throw new SecurityException("Invalid edit token");
 			}
 			String readHash = encodedData.substring(0, encodedHashLength);
 			String calculatedHash = PasswordHasher.hash(encodedData.substring(encodedHashLength, encodedData.length()).toCharArray(), getSecret(), hashRounds, hashLength);
 
 			if (!readHash.equals(calculatedHash))
 			{
-				throw new SecurityException("Invalid token!");
+				throw new SecurityException("Invalid edit token!");
 			}
 
 			byte[] readBytes = Base64.getUrlDecoder().decode(encodedData.substring(encodedHashLength, encodedData.length()));
@@ -165,7 +165,7 @@ public class EditToken
 			byte version = buffer.getByte();
 			if (version != tokenVersion)
 			{
-				throw new Exception("Expected token version " + tokenVersion + " but read " + version);
+				throw new SecurityException("Expected token version " + tokenVersion + " but read " + version);
 			}
 
 			increment = buffer.getInt();
@@ -173,7 +173,7 @@ public class EditToken
 
 			if ((System.currentTimeMillis() - incrementTime) > tokenMaxAge)
 			{
-				throw new RestException("Edit Token Expired");
+				throw new SecurityException("Edit Token Expired");
 			}
 
 			authorNid = buffer.getInt();
@@ -195,7 +195,8 @@ public class EditToken
 	{
 		try
 		{
-			log.info("Expiring unused tokens - size before: " + VALID_TOKENS.size());
+			int startSize = VALID_TOKENS.size();
+			log.trace("Expiring unused tokens - size before: {}", () -> VALID_TOKENS.size());
 			Iterator<Entry<Integer, Long>> x = VALID_TOKENS.entrySet().iterator();
 			while (x.hasNext())
 			{
@@ -204,7 +205,7 @@ public class EditToken
 					x.remove();
 				}
 			}
-			log.info("Finished expiring unused tokens - size after: " + VALID_TOKENS.size());
+			log.debug("Finished expiring unused tokens - size before: {} size after: {}", () -> startSize, () -> VALID_TOKENS.size());
 		}
 		catch (Exception e)
 		{

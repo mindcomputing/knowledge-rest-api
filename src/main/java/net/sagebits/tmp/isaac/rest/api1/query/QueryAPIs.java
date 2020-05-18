@@ -221,7 +221,7 @@ public class QueryAPIs
 
 			final String restPath = RestPaths.queryAppPathComponent + RestPaths.flworComponent;
 
-			return new RestQueryResultPage(pageNum, maxPageSize, results.length, false, results.length == maxPageSize, restPath, results); 
+			return new RestQueryResultPage(pageNum, maxPageSize, results.length, true, results.length == maxPageSize, restPath, results); 
 
 		}
 		catch (RestException e)

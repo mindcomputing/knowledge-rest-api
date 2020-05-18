@@ -39,6 +39,7 @@ import java.util.Date;
 import java.util.Locale;
 import java.util.Optional;
 import java.util.OptionalInt;
+import java.util.OptionalLong;
 import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
@@ -125,32 +126,14 @@ public class Util
 	{
 		LatestVersion<DescriptionVersion> descriptionOptional = lc.getDescription(Get.assemblageService().getDescriptionsForComponent(conceptNid), sc);
 
+		descriptionOptional.sortByState();
 		if (descriptionOptional.isPresent())
 		{
-			if (!descriptionOptional.contradictions().isEmpty())
-			{
-				// Prefer active descriptions over inactive, if there was a contradiction (which means they tied the sort - have the same time)
-				// common for a replacement description to have the same time as the retired one.
-				if (descriptionOptional.get().getStatus() == Status.ACTIVE)
-				{
-					return descriptionOptional.get().getText();
-				}
-				else
-				{
-					for (DescriptionVersion ds : descriptionOptional.contradictions())
-					{
-						if (ds.getStatus() == Status.ACTIVE)
-						{
-							return ds.getText();
-						}
-					}
-				}
-			}
 			return descriptionOptional.get().getText();
 		}
 		else
 		{
-			return null;
+			return "[Description not available for " + Get.identifierService().getUuidPrimordialStringForNid(conceptNid) + "]";
 		}
 	}
 
@@ -243,10 +226,10 @@ public class Util
 	 */
 	public static long parseDate(String dateString) throws DateTimeParseException
 	{
-		Optional<Long> l = NumericUtils.getLong(dateString);
+		OptionalLong l = NumericUtils.getLong(dateString);
 		if (l.isPresent())
 		{
-			return l.get();
+			return l.getAsLong();
 		}
 		else
 		{

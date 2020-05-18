@@ -36,8 +36,8 @@ import java.nio.file.Files;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.UUID;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import sh.isaac.api.externalizable.ByteArrayDataBuffer;
 import sh.isaac.api.util.PasswordHasher;
 
@@ -49,9 +49,11 @@ import sh.isaac.api.util.PasswordHasher;
  */
 public class SSOToken
 {
-	private static final Logger log = LoggerFactory.getLogger(SSOToken.class);
+	private static final Logger log = LogManager.getLogger(SSOToken.class);
+	
+	public static final String cookieName = "ssoToken";
 
-	private static final byte tokenVersion = 1;
+	private static final byte tokenVersion = 2;
 	private static final int hashRounds = 2048;
 	private static final int hashLength = 64;
 	private static final int encodedHashLength = (int) Math.ceil(hashLength / 8f / 3f) * 4;  // http://stackoverflow.com/a/4715480
@@ -72,16 +74,18 @@ public class SSOToken
 	
 	//data actually put into the token
 	private long createTime;
-
+	private int userLogoutCount;
 	private UUID tokenForUser;
 	
 	/**
 	 * Create a new token for the specified user
 	 * @param userIdentity the user id this token is being created for.
+	 * @param userLogoutCount used for invalidating existing tokens on logout
 	 */
-	public SSOToken(UUID userIdentity)
+	public SSOToken(UUID userIdentity, int userLogoutCount)
 	{
 		this.createTime = System.currentTimeMillis();
+		this.userLogoutCount = userLogoutCount;
 		this.tokenForUser = userIdentity;
 		this.serialization = serialize();
 	}
@@ -99,6 +103,7 @@ public class SSOToken
 			long time = System.currentTimeMillis();
 			if (encodedData.length() < encodedHashLength)
 			{
+				log.info("Invalid token {}, {} less than {}", encodedData, encodedData.length(), encodedHashLength);
 				throw new SecurityException("Invalid token");
 			}
 			String readHash = encodedData.substring(0, encodedHashLength);
@@ -106,13 +111,14 @@ public class SSOToken
 
 			if (!readHash.equals(calculatedHash))
 			{
+				log.info("Invalid token, {}, read hash: {} calculated hash: {}", encodedData, readHash, calculatedHash);
 				throw new SecurityException("Invalid token!");
 			}
 
 			byte[] readBytes = Base64.getUrlDecoder().decode(encodedData.substring(encodedHashLength, encodedData.length()));
 			ByteArrayDataBuffer buffer = new ByteArrayDataBuffer(readBytes);
 			byte version = buffer.getByte();
-			if (version != tokenVersion)
+			if (version != tokenVersion && version != 1)
 			{
 				throw new SecurityException("Expected token version " + tokenVersion + " but read " + version);
 			}
@@ -121,6 +127,10 @@ public class SSOToken
 			if ((System.currentTimeMillis() - createTime) > tokenMaxAge)
 			{
 				throw new SecurityException("SSO Token Expired");
+			}
+			if (version > 1)
+			{
+				userLogoutCount = buffer.getInt();
 			}
 			long msb = buffer.getLong();
 			long lsb = buffer.getLong();
@@ -157,8 +167,7 @@ public class SSOToken
 	}
 
 	/**
-	 * The URL safe encoded bytes that represent this user in token form.  The provided token may only be 
-	 * @return
+	 * @return The URL safe encoded bytes that represent this user in token form.
 	 */
 	public String getSerialized()
 	{
@@ -166,8 +175,7 @@ public class SSOToken
 	}
 	
 	/**
-	 * The UUID of the user allowed by this token
-	 * @return
+	 * @return The UUID of the user allowed by this token
 	 */
 	public UUID getUser()
 	{
@@ -175,8 +183,15 @@ public class SSOToken
 	}
 	
 	/**
-	 * The time this token was most recently parsed or created
-	 * @return
+	 * @return The user logout count assigned in this token
+	 */
+	public int getUserLogOutCount()
+	{
+		return userLogoutCount;
+	}
+	
+	/**
+	 * @return The time this token was most recently parsed or created
 	 */
 	public long getCreationTime()
 	{
@@ -188,6 +203,7 @@ public class SSOToken
 		ByteArrayDataBuffer buffer = new ByteArrayDataBuffer(25);
 		buffer.putByte(tokenVersion);
 		buffer.putLong(createTime);
+		buffer.putInt(userLogoutCount);
 		buffer.putLong(tokenForUser.getMostSignificantBits());
 		buffer.putLong(tokenForUser.getLeastSignificantBits());
 		buffer.trimToSize();

@@ -54,9 +54,8 @@ import net.sagebits.tmp.isaac.rest.session.RequestInfo;
 @Provider
 public class ThreadLocalCleanupContainerResponseFilter implements ContainerResponseFilter
 {
-	private static Logger log = LogManager.getLogger();
 	protected static Logger slowQueryLog = LogManager.getLogger("net.sagebits.tmp.isaac.rest.SlowQueryLog");
-	protected static Logger userQueryLog = LogManager.getLogger("net.sagebits.tmp.isaac.rest.UserLog");
+	protected static Logger requestLog = LogManager.getLogger("net.sagebits.tmp.isaac.rest.RequestLog");
 
 	/**
 	 * {@inheritDoc}
@@ -68,19 +67,21 @@ public class ThreadLocalCleanupContainerResponseFilter implements ContainerRespo
 		{
 			RequestInfo ri = RequestInfo.remove();
 			long time = System.currentTimeMillis() - ri.getCreateTime();
-			log.info("{} - {} - Request took {} ms for {}", ri.getUniqueId(), responseContext.getStatus(), time, requestContext.getUriInfo().getPath(true));
 			if (time > 2000)
 			{
 				slowQueryLog.warn("{} - Request took {} ms for {}", ri.getUniqueId(), time, requestContext.getUriInfo().getPath(true));
 			}
-			userQueryLog.info("{} - {} - {} - {}", ri.getUniqueId(), ri.getUser().isPresent() ? 
-					ri.getUser().get().userId + " - " + ri.getUser().get().userName : "-no user-", 
+			requestLog.info("{} - {} - {}ms - {} - {}{}", 
+					ri.getUniqueId(), 
 					responseContext.getStatus(),
-					requestContext.getUriInfo().getPath(true));
+					time, 
+					ri.getUser().isPresent() ? ri.getUser().get().userId + " - " + ri.getUser().get().userName : "-no user-", 
+					requestContext.getUriInfo().getPath(true),
+					ri.getAuthFailReason() != null ? " - " + ri.getAuthFailReason() : "");
 		}
 		catch (Throwable e)
 		{
-			log.error("Unexpected error trying to clear the thread local", e);
+			LogManager.getLogger().error("Unexpected error trying to clear the thread local", e);
 		}
 	}
 }

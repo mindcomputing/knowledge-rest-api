@@ -22,8 +22,11 @@ import javax.xml.bind.annotation.XmlRootElement;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
-import sh.isaac.api.externalizable.IsaacObjectType;
+import net.sagebits.tmp.isaac.rest.api1.data.RestStampedVersion;
+import net.sagebits.tmp.isaac.rest.api1.data.concept.RestConceptChronology;
+import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestLogicCoordinate;
+import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestStampCoordinate;
+import sh.isaac.api.Get;
 
 /**
  * {@link RestClassifierResult}
@@ -55,7 +58,7 @@ public class RestClassifierResult
 	 */
 	@XmlElement
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	private RestIdentifiedObject[] affectedConcepts;
+	private RestConceptChronology[] affectedConcepts;
 	
 	/**
 	 * The count of concepts affected by this classification.  Only provided upon successful completion.
@@ -98,7 +101,7 @@ public class RestClassifierResult
 	 */
 	@XmlElement
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	private RestIdentifiedObject[] orphanedConcepts;
+	private RestConceptChronology[] orphanedConcepts;
 	
 	/**
 	 * Count of orphaned concepts identified by the classification process. 
@@ -131,90 +134,128 @@ public class RestClassifierResult
 	@XmlElement
 	private String status;
 	
+	/**
+	 * The stamp coordinate used when this classification was executed
+	 */
+	@XmlElement
+	protected RestStampCoordinate stampCoordinate;
+	
+	/**
+	 * The logic coordinate used when this classification was executed
+	 */
+	@XmlElement
+	protected RestLogicCoordinate logicCoordinate;
+	
+	/**
+	 * The stamp version info where the classifier results were written
+	 */
+	@XmlElement
+	protected RestStampedVersion writeStamp;
+	
 	protected RestClassifierResult()
 	{
 		//For jaxb
 	}
 	
-	public RestClassifierResult(ClassifierResult cr, boolean limitResult)
+	public RestClassifierResult(ClassifierResult cr, boolean limitResult, boolean skipResults)
 	{
 		this.classificationId = cr.classificationId;
 		this.launchTime = cr.launchTime;
 		this.status = cr.status;
 		this.completeTime = cr.completeTime;
-		this.status = cr.status;
 		this.processedConceptCount = cr.processedConceptCount;
-		
 		if (cr.affectedConcepts != null && cr.affectedConcepts.length > 0)
 		{
-			this.affectedConcepts = new RestIdentifiedObject[limitResult ? Math.min(100, cr.affectedConcepts.length) : cr.affectedConcepts.length];
 			this.affectedConceptCount = cr.affectedConcepts.length;
-			int i = 0;
-			for (int nid : cr.affectedConcepts)
+			if (!skipResults)
 			{
-				this.affectedConcepts[i++] = new RestIdentifiedObject(nid, IsaacObjectType.CONCEPT);
-				if (limitResult && i == 100)
+				this.affectedConcepts = new RestConceptChronology[limitResult ? Math.min(100, cr.affectedConcepts.length) : cr.affectedConcepts.length];
+				
+				int i = 0;
+				for (int nid : cr.affectedConcepts)
 				{
-					break;
+					this.affectedConcepts[i++] = new RestConceptChronology(Get.concept(nid), false, false, true);
+					if (limitResult && i == 100)
+					{
+						break;
+					}
 				}
 			}
 		}
 		
 		if (cr.equivalentSets != null && cr.equivalentSets.size() > 0)
 		{
-			this.equivalentSets = new RestClassifierEquivalentSet[(limitResult ? Math.min(100, cr.equivalentSets.size()) : cr.equivalentSets.size())];
 			this.equivalentSetCount = cr.equivalentSets.size();
-			int i = 0;
-			for (int[] ial : cr.equivalentSets)
+			
+			if (!skipResults)
 			{
-				List<RestIdentifiedObject> set = new ArrayList<>(ial.length);
-				for (int nid : ial)
+				this.equivalentSets = new RestClassifierEquivalentSet[(limitResult ? Math.min(100, cr.equivalentSets.size()) : cr.equivalentSets.size())];
+				int i = 0;
+				for (int[] ial : cr.equivalentSets)
 				{
-					set.add(new RestIdentifiedObject(nid));
-				}
-				
-				this.equivalentSets[i] = new RestClassifierEquivalentSet(set);
-				
-				if (limitResult && ++i == 100)
-				{
-					break;
+					List<RestConceptChronology> set = new ArrayList<>(ial.length);
+					for (int nid : ial)
+					{
+						set.add(new RestConceptChronology(Get.concept(nid), false, false, true));
+					}
+					
+					this.equivalentSets[i] = new RestClassifierEquivalentSet(set);
+					
+					if (limitResult && ++i == 100)
+					{
+						break;
+					}
 				}
 			}
 		}
 		
 		if (cr.cycles != null && cr.cycles.size() > 0)
 		{
-			cycles = new RestClassifierCycle[(limitResult ? Math.min(100, cr.cycles.size()) : cr.cycles.size())];
 			cycleCount = cr.cycles.size();
-			int i = 0;
-			for (ClassifierCycle cycle : cr.cycles)
+			if (!skipResults)
 			{
-				cycles[i] = new RestClassifierCycle(cycle);
-				if (limitResult && ++i == 100)
+				cycles = new RestClassifierCycle[(limitResult ? Math.min(100, cr.cycles.size()) : cr.cycles.size())];
+				
+				int i = 0;
+				for (ClassifierCycle cycle : cr.cycles)
 				{
-					break;
+					cycles[i] = new RestClassifierCycle(cycle);
+					if (limitResult && ++i == 100)
+					{
+						break;
+					}
 				}
 			}
 		}
 		
-		if (cycles != null && cycles.length > 0)
+		if (cycleCount > 0)
 		{
 			status = "Failed due to cycles";
 		}
 		
 		if (cr.orphanedConcepts != null && cr.orphanedConcepts.length > 0)
 		{
-			this.orphanedConcepts = new RestIdentifiedObject[limitResult ? Math.min(100, cr.orphanedConcepts.length) : cr.orphanedConcepts.length];
 			this.orphanedConceptCount = cr.orphanedConcepts.length;
-			int j = 0;
-			for (int orphan : cr.orphanedConcepts)
+			if (!skipResults)
 			{
-				orphanedConcepts[j++] = new RestIdentifiedObject(orphan);
-				if (limitResult && j == 100)
+				this.orphanedConcepts = new RestConceptChronology[limitResult ? Math.min(100, cr.orphanedConcepts.length) : cr.orphanedConcepts.length];
+				int j = 0;
+				for (int orphan : cr.orphanedConcepts)
 				{
-					break;
+					orphanedConcepts[j++] = new RestConceptChronology(Get.concept(orphan), false, false, true);
+					if (limitResult && j == 100)
+					{
+						break;
+					}
 				}
 			}
+		}
+		
+		this.stampCoordinate = cr.stampCoordinate;
+		this.logicCoordinate = cr.logicCoordinate;
+		if (cr.writeStamp != 0)
+		{
+			this.writeStamp = new RestStampedVersion(Get.stampService().getStamp(cr.writeStamp));
 		}
 	}
 }

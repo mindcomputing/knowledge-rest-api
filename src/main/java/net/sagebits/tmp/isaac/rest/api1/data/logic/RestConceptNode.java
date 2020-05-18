@@ -33,6 +33,7 @@ package net.sagebits.tmp.isaac.rest.api1.data.logic;
 import javax.xml.bind.annotation.XmlElement;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import net.sagebits.tmp.isaac.rest.ExpandUtil;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
 import net.sagebits.tmp.isaac.rest.api1.data.concept.RestConceptVersion;
 import net.sagebits.tmp.isaac.rest.session.RequestInfo;
@@ -41,9 +42,12 @@ import sh.isaac.api.chronicle.LatestVersion;
 import sh.isaac.api.component.concept.ConceptChronology;
 import sh.isaac.api.component.concept.ConceptVersion;
 import sh.isaac.api.coordinate.ManifoldCoordinate;
+import sh.isaac.api.coordinate.StampCoordinate;
 import sh.isaac.api.externalizable.IsaacObjectType;
+import sh.isaac.model.coordinate.ManifoldCoordinateImpl;
 import sh.isaac.model.logic.node.external.ConceptNodeWithUuids;
 import sh.isaac.model.logic.node.internal.ConceptNodeWithNids;
+import sh.isaac.utility.Frills;
 
 /**
  * 
@@ -77,7 +81,7 @@ public class RestConceptNode extends RestLogicNode
 
 	/**
 	 * The String text description of the concept referred to by this REST logic graph node. It is included as a convenience, as it may be retrieved
-	 * based on the concept nid
+	 * based on the concept nid.  This may be null, depending on the stamps involved in the request if no description is available given the path.
 	 */
 	@XmlElement
 	public String conceptDescription;
@@ -110,16 +114,38 @@ public class RestConceptNode extends RestLogicNode
 	private void finishSetup(int conceptNid, ManifoldCoordinate coordForRead)
 	{
 		this.concept = new RestIdentifiedObject(conceptNid, IsaacObjectType.CONCEPT);
-		conceptDescription = Get.conceptService().getSnapshot(coordForRead).conceptDescriptionText(conceptNid);
+		Get.conceptService().getSnapshot(coordForRead).getDescriptionOptional(conceptNid).ifPresent(dv -> conceptDescription = dv.getText());
 
 		if (RequestInfo.get().shouldExpand(ExpandUtil.versionExpandable))
 		{
 			ConceptChronology cc = Get.conceptService().getConceptChronology(conceptNid);
 			LatestVersion<ConceptVersion> olcv = cc.getLatestVersion(coordForRead.getStampCoordinate());
 			// TODO handle contradictions
-			conceptVersion = new RestConceptVersion(olcv.get(), true, RequestInfo.get().shouldExpand(ExpandUtil.includeParents), 
+			
+			if (olcv.isAbsent() && Frills.isMetadata(cc.getNid()))
+			{
+				LOG.info("Using latest version stamp to read metadata concept type concept");
+				//Use latest for metadata, cause its often newer, but we pretty much always need it in the graph refs.
+				StampCoordinate tweakedCoord = coordForRead.makeCoordinateAnalog(Long.MAX_VALUE);
+				olcv = cc.getLatestVersion(tweakedCoord);
+				
+				//If the concept wasn't present, the description will be bad too.
+				Get.conceptService().getSnapshot(new ManifoldCoordinateImpl(tweakedCoord, coordForRead.getLanguageCoordinate()))
+						.getDescriptionOptional(conceptNid).ifPresent(dv -> conceptDescription = dv.getDescriptionType())
+						.ifAbsent(() -> conceptDescription = Util.readBestDescription(conceptNid));
+			}
+			
+			if (olcv.isPresent())
+			{
+				conceptVersion = new RestConceptVersion(olcv.get(), true, RequestInfo.get().shouldExpand(ExpandUtil.includeParents), 
 					RequestInfo.get().shouldExpand(ExpandUtil.countParents),
 					false, false, RequestInfo.get().getStated(), false, RequestInfo.get().shouldExpand(ExpandUtil.terminologyType), false);
+			}
+			else
+			{
+				LOG.info("No version of {} present at {} coordinate", this.concept, coordForRead);
+				conceptVersion = null;
+			}
 		}
 		else
 		{

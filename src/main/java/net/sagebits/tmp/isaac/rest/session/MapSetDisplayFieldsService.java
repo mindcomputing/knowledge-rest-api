@@ -142,7 +142,10 @@ public class MapSetDisplayFieldsService
 
 	public void invalidateCache()
 	{
-		getFields().clear();
+		if (fields_.size() > 0)
+		{
+			getFields().clear();
+		}
 	}
 
 	public RestMappingSetDisplayField[] getAllFields() throws RestException
@@ -157,7 +160,7 @@ public class MapSetDisplayFieldsService
 			catch (Exception e)
 			{
 				String msg = "Failed constructing RestMappingSetDisplayField from field UUID=" + f.concept.getPrimordialUuid() + ", DESC="
-						+ Get.conceptDescriptionText(f.concept.getNid()) + " BACKING=" + Get.conceptDescriptionText(f.getBackingConcept().getNid());
+						+ Util.readBestDescription(f.concept.getNid()) + " BACKING=" + Util.readBestDescription(f.getBackingConcept().getNid());
 				log.error(msg, e);
 				throw new RestException(msg);
 			}
@@ -302,7 +305,7 @@ public class MapSetDisplayFieldsService
 			{
 				ConceptChronology concept = Get.conceptService().getConceptChronology(id);
 
-				descriptionsByUuid.put(concept.getPrimordialUuid(), Get.conceptDescriptionText(id));
+				descriptionsByUuid.put(concept.getPrimordialUuid(), Util.readBestDescription(id));
 			}
 		}
 

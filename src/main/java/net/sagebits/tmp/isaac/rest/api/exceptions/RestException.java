@@ -31,7 +31,10 @@
 package net.sagebits.tmp.isaac.rest.api.exceptions;
 
 import java.io.IOException;
+import javax.ws.rs.core.Response.Status;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 /**
  * 
@@ -42,19 +45,30 @@ import org.apache.commons.lang3.StringUtils;
 public class RestException extends IOException
 {
 	private static final long serialVersionUID = 1L;
+	private static Logger log = LogManager.getLogger();
 
 	String parameterName_;
 	String parameterValue_;
+	Status status_ = Status.BAD_REQUEST;
 
 	public RestException(String message)
 	{
 		super(message);
+		log.debug("RestException created: {}", () -> toString());
+	}
+	
+	public RestException(String message, Status status)
+	{
+		super(message);
+		this.status_ = status;
+		log.debug("RestException created: {}", () -> toString());
 	}
 
 	public RestException(String parameterName, String message)
 	{
 		super(message);
 		parameterName_ = parameterName;
+		log.debug("RestException created: {}", () -> toString());
 	}
 
 	public RestException(String parameterName, String parameterValue, String message)
@@ -62,6 +76,7 @@ public class RestException extends IOException
 		super(message);
 		parameterName_ = parameterName;
 		parameterValue_ = parameterValue;
+		log.debug("RestException created: {}", () -> toString());
 	}
 
 	/**
@@ -78,6 +93,14 @@ public class RestException extends IOException
 	public String getParameterValue()
 	{
 		return parameterValue_;
+	}
+	
+	/**
+	 * @return the status
+	 */
+	public Status getStatus()
+	{
+		return status_;
 	}
 
 	public String getParameterSpecificMessage()

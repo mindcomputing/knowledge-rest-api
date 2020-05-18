@@ -32,6 +32,7 @@ package net.sagebits.tmp.isaac.rest.api1.concept;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Optional;
 import java.util.OptionalInt;
@@ -165,11 +166,37 @@ public class ConceptAPIs
 	 * Returns the chronology of a concept.
 	 * 
 	 * @param id - A UUID, or nid
+	 * @param includeParents - only applicable in combination with an expand of versionsAll or versionsLatestOnly.  
+	 *     Include the direct parent concepts of the requested concept in the response. Defaults to false.  If true, and includeChildren is also 
+	 *     specified, then the 1st level parents of each child will also be returned. 
+	 * @param countParents - only applicable in combination with an expand of versionsAll or versionsLatestOnly.  
+	 *     true to count the number of parents above this node. May be used with or without the includeParents parameter - it works independently. 
+	 *     When used in combination with the parentHeight parameter, only the last level of items returned will return parent counts. This parameter 
+	 *     also applies to the expanded children - if childDepth is requested, and countParents is set, this will return a count of parents of each 
+	 *     child, which can be used to determine if a child has multiple parents. Defaults to false if not provided.
+	 * @param includeChildren - only applicable in combination with an expand of versionsAll or versionsLatestOnly.  
+	 *     Include the direct child concepts of the request concept in the response. Defaults to false.
+	 * @param countChildren - only applicable in combination with an expand of versionsAll or versionsLatestOnly.  
+	 *     true to count the number of children below this node. May be used with or without the includeChildren parameter - it works independently. 
+	 *     When used in combination with the childDepth parameter, only the last level of items returned will return child counts. Defaults to false.
+	 * @param semanticMembership - When true, the semanticMembership field of the RestConceptVersion object will be populated with the set of unique 
+	 *     concept nids that describe semantics that this concept is referenced by. (there exists a semantic instance where the referencedComponent is 
+	 *     the RestConceptVersion being returned here, then the value of the assemblage is also included in the RestConceptVersion).  This will not 
+	 *     include the membership information for any assemblage of type logic graph or descriptions.
 	 * @param expand - comma separated list of fields to expand. Supports:
-	 *     <br> 'versionsAll' - returns all versions of the concept.  Note that, this only includes all versions for the top level concept chronology.
+	 *     <br> 'versionsAll' - <p>returns all versions of the concept.  Note that, this only includes all versions for the top level concept chronology.
 	 *         For nested objects, the most appropriate version is returned, relative to the version of the concept being returned.  In other words, the STAMP 
 	 *         of the concept version being returned is used to calculate the appropriate stamp for the referenced component versions, when they are looked up.
-	 *         Sorted newest to oldest
+	 *     <br>
+	 *         This can lead to a version of a referenced component being unavailable at a calculated stamp, especially in cases where the concept version 
+	 *         is older than the earliest version of the referenced component - which can happen depending on which content is loaded (or in what order).  
+	 *         Callers should handle null version fields for nested components.
+	 *     <br>
+	 *         Because the stamp of the concept version being returned might be older than the stamps of the available referenced components, we always return 
+	 *         two copies of the newest version when versionsAll is specified.  The first - position 0 in the return - will be calculated with the stamp supplied 
+	 *         in the request for all components.  The second - position 1 - will contain the same top level version, but any referenced components will have 
+	 *         been rendered with a stamp from the concept version.  Beyond the first two positions, all additional versions are sorted newest to oldest.
+	 *         </p>
 	 *     <br> 'versionsLatestOnly' - ignored if specified in combination with versionsAll
 	 * @param terminologyType - when true, the concept nids of the terminologies that this concept is part of on any stamp is returned. This
 	 *            is determined by whether or not there is version of this concept present with a module that extends from one of the children of the
@@ -187,19 +214,28 @@ public class ConceptAPIs
 	@Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
 	@Path(RestPaths.chronologyComponent + "{" + RequestParameters.id + "}")
 	public RestConceptChronology getConceptChronology(@PathParam(RequestParameters.id) String id, @QueryParam(RequestParameters.expand) String expand,
+			@QueryParam(RequestParameters.includeParents) @DefaultValue("false") String includeParents,
+			@QueryParam(RequestParameters.countParents) @DefaultValue("false") String countParents,
+			@QueryParam(RequestParameters.includeChildren) @DefaultValue("false") String includeChildren,
+			@QueryParam(RequestParameters.countChildren) @DefaultValue("false") String countChildren,
+			@QueryParam(RequestParameters.semanticMembership) @DefaultValue("false") String semanticMembership,
 			@QueryParam(RequestParameters.terminologyType) @DefaultValue("false") String terminologyType,
 			@QueryParam(RequestParameters.coordToken) String coordToken,
 			@QueryParam(RequestParameters.altId) String altId) throws RestException
 	{
-		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.id, RequestParameters.expand,
-				RequestParameters.terminologyType, RequestParameters.COORDINATE_PARAM_NAMES, RequestParameters.altId);
+		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.id, RequestParameters.includeParents,
+				RequestParameters.countParents, RequestParameters.includeChildren, RequestParameters.countChildren, RequestParameters.semanticMembership,
+				RequestParameters.expand, RequestParameters.terminologyType, RequestParameters.COORDINATE_PARAM_NAMES, RequestParameters.altId);
 		
 		RequestInfo.get().validateMethodExpansions(ExpandUtil.versionsAllExpandable, ExpandUtil.versionsLatestOnlyExpandable);
 
 		ConceptChronology concept = findConceptChronology(id);
 
 		RestConceptChronology chronology = new RestConceptChronology(concept, RequestInfo.get().shouldExpand(ExpandUtil.versionsAllExpandable),
-				RequestInfo.get().shouldExpand(ExpandUtil.versionsLatestOnlyExpandable), Boolean.parseBoolean(terminologyType.trim()));
+				RequestInfo.get().shouldExpand(ExpandUtil.versionsLatestOnlyExpandable), 
+				Boolean.parseBoolean(includeParents.trim()), Boolean.parseBoolean(countParents.trim()), Boolean.parseBoolean(includeChildren.trim()),
+				Boolean.parseBoolean(countChildren.trim()), Boolean.parseBoolean(terminologyType.trim()), RequestInfo.get().getLanguageCoordinate(), 
+				RequestInfo.get().getStated(), Boolean.parseBoolean(semanticMembership.trim()));
 
 		return chronology;
 	}
@@ -244,7 +280,7 @@ public class ConceptAPIs
 
 	/**
 	 * @param id - A UUID or nid of a CONCEPT
-	 * @param includeAttributes - true to include the (nested) attributes, which includes the dialect information, false to ommit
+	 * @param includeAttributes - true to include the (nested) attributes, which includes the dialect information, false to omit
 	 *            Dialects and other types of attributes will be returned in different structures - all attributes that represent dialects will
 	 *            be in the RestSemanticDescriptionVersion object, in the dialects fields, while any other type of attribute will be in the
 	 *            RestSemanticVersion in the nestedAttributes field.
@@ -258,7 +294,15 @@ public class ConceptAPIs
 	 *     returned.  This can be set to one or more names or ids from the /1/id/types or the value 'ANY'.  Requesting IDs that are unneeded will harm 
 	 *     performance. 
 	 * 
-	 * @return The descriptions associated with the concept
+	 * @return The descriptions associated with the concept, sorted via many levels:
+	 *     <br> - level 1 - by core types first (FSN, Regular Name, Definition) or - if not a core type, grouped by associated core type, and then 
+	 *         alphabetical by the description type within the group (fsn, regular name, definition).
+	 *     <br> - level 2 - by language - EN first, and then alphabetical by the language after this
+	 *     <br> - level 3 - If it has a dialect marking preferred, this comes before any descriptions with only acceptable dialect markings.  
+	 *     <br> - level 4 - alphabetical by the text of the description
+	 *     
+	 *     For each description, if there are multiple dialects, the included dialects will also be sorted
+	 *     <br> - en-us first, then en-gb, then alphabetical after this
 	 * @throws RestException
 	 */
 	@GET
@@ -294,6 +338,9 @@ public class ConceptAPIs
 				result.add((RestSemanticDescriptionVersion) d);
 			}
 		}
+		
+		Collections.sort(result);
+		
 		return result.toArray(new RestSemanticDescriptionVersion[result.size()]);
 	}
 

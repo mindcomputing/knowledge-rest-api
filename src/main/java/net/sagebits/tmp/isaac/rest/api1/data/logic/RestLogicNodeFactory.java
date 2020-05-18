@@ -70,8 +70,7 @@ public final class RestLogicNodeFactory
 
 	public static RestLogicNode create(LogicNode logicNode, ManifoldCoordinate coordForRead)
 	{
-		//TODO we don't yet support any of the SubstitutionNode hierarchy
-		//TODO nor do we support TemplateNode
+		//TODO we don't yet support any of the SubstitutionNode hierarchy nor do we support TemplateNode
 		if (logicNode instanceof AndNode)
 			return new RestConnectorNode((AndNode) logicNode, coordForRead);
 		else if (logicNode instanceof ConceptNodeWithNids)

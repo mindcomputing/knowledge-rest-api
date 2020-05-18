@@ -120,7 +120,7 @@ public class MappingAPIs
 	@GET
 	@Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
 	@Path(RestPaths.mappingSetsComponent)
-	public RestMappingSetVersion[] getMappingSets(@QueryParam(RequestParameters.coordToken) String coordToken,
+	public RestMappingSetVersion[] getMappingSets(@QueryParam(RequestParameters.coordToken) String coordToken, @QueryParam(RequestParameters.expand) String expand,
 			@QueryParam(RequestParameters.altId) String altId) throws RestException
 	{
 		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.expand,
@@ -132,9 +132,7 @@ public class MappingAPIs
 
 		Get.assemblageService().getSemanticChronologyStream(IsaacMappingConstants.get().DYNAMIC_SEMANTIC_MAPPING_SEMANTIC_TYPE.getNid()).forEach(semanticC -> {
 			// We don't change the state / care about the state on the semantic. We update the state on the concept.
-			@SuppressWarnings({ "rawtypes" })
-			LatestVersion<DynamicVersion> latest = semanticC
-					.getLatestVersion(RequestInfo.get().getStampCoordinate().makeCoordinateAnalog(Status.ACTIVE, Status.INACTIVE));
+			LatestVersion<DynamicVersion> latest = semanticC.getLatestVersion(RequestInfo.get().getStampCoordinate().makeCoordinateAnalog(Status.ANY_STATUS_SET));
 			Util.logContradictions(log, latest);
 
 			if (latest.isPresent())
@@ -147,8 +145,6 @@ public class MappingAPIs
 
 				if (cv.isPresent())
 				{
-					// TODO handle contradictions
-					Util.logContradictions(log, cv);
 					results.add(new RestMappingSetVersion(cv.get(), latest.get(), conceptCoord, RequestInfo.get().shouldExpand(ExpandUtil.comments)));
 				}
 			}
@@ -195,7 +191,6 @@ public class MappingAPIs
 			throw new RestException("The map set identified by '" + id + "' is not present");
 		}
 
-		@SuppressWarnings({ "rawtypes" })
 		LatestVersion<DynamicVersion> latest = semantic.get().getLatestVersion(RequestInfo.get().getStampCoordinate());
 		Util.logContradictions(log, latest);
 		if (latest.isPresent())
@@ -294,7 +289,7 @@ public class MappingAPIs
 
 		for (SemanticVersion semanticVersion : semantics.getValues())
 		{
-			items.add(new RestMappingItemVersion(((DynamicVersion<?>) semanticVersion), positions.targetPos, positions.qualfierPos,
+			items.add(new RestMappingItemVersion(((DynamicVersion) semanticVersion), positions.targetPos, positions.qualfierPos,
 					RequestInfo.get().shouldExpand(ExpandUtil.referencedDetails), RequestInfo.get().shouldExpand(ExpandUtil.comments),
 					displayFields));
 		}
@@ -334,7 +329,7 @@ public class MappingAPIs
 
 		Positions positions = Positions.getPositions(semantic.getAssemblageNid());
 
-		LatestVersion<DynamicVersion<?>> latest = semantic.getLatestVersion(RequestInfo.get().getStampCoordinate());
+		LatestVersion<DynamicVersion> latest = semantic.getLatestVersion(RequestInfo.get().getStampCoordinate());
 		Util.logContradictions(log, latest);
 
 		List<RestMappingSetDisplayField> displayFields = MappingAPIs.getMappingSetDisplayFieldsFromMappingSet(semantic.getAssemblageNid(),
@@ -370,50 +365,54 @@ public class MappingAPIs
 		List<RestDynamicSemanticColumnInfo> itemFieldDefinitions = getItemFieldDefinitions(mappingConceptNid);
 		if (mapSetFieldsSemantic.isPresent())
 		{
-			LatestVersion<DynamicVersion<?>> existingVersionOptionalLatest = mapSetFieldsSemantic.get().getLatestVersion(stampCoord);
+			StampCoordinate readCoord = stampCoord.makeCoordinateAnalog(Status.ACTIVE_ONLY_SET);
+			LatestVersion<DynamicVersion> existingVersionOptionalLatest = mapSetFieldsSemantic.get().getLatestVersion(readCoord);
 			Util.logContradictions(log, existingVersionOptionalLatest);
-			if (!existingVersionOptionalLatest.isPresent())
+			if (!existingVersionOptionalLatest.isPresent())  //There but inactive - jump down to default behavior.
 			{ // TODO Handle contradictions
-				throw new RuntimeException(
-						"No latest version of mapSetFieldsSemantic " + mapSetFieldsSemantic.get().getNid() + " found for specified stamp coordinate " + stampCoord);
+				log.debug("No latest version of mapSetFieldsSemantic " + mapSetFieldsSemantic.get().getNid() 
+						+ " found for specified stamp coordinate " + readCoord);
 			}
-			DynamicData[] existingData = existingVersionOptionalLatest.get().getData();
-			DynamicArrayImpl<DynamicStringImpl> mapSetFieldsSemanticDataArray = (existingData != null && existingData.length > 0)
-					? (DynamicArrayImpl<DynamicStringImpl>) existingData[0]
-					: null;
-			if (mapSetFieldsSemanticDataArray != null && mapSetFieldsSemanticDataArray.getDataArray() != null
-					&& mapSetFieldsSemanticDataArray.getDataArray().length > 0)
+			else
 			{
-				for (DynamicStringImpl stringSemantic : (DynamicStringImpl[]) mapSetFieldsSemanticDataArray.getDataArray())
+				DynamicData[] existingData = existingVersionOptionalLatest.get().getData();
+				DynamicArrayImpl<DynamicStringImpl> mapSetFieldsSemanticDataArray = (existingData != null && existingData.length > 0)
+						? (DynamicArrayImpl<DynamicStringImpl>) existingData[0]
+						: null;
+				if (mapSetFieldsSemanticDataArray != null && mapSetFieldsSemanticDataArray.getDataArray() != null
+						&& mapSetFieldsSemanticDataArray.getDataArray().length > 0)
 				{
-					String[] fieldComponents = stringSemantic.getDataString().split(":");
-					MapSetItemComponent componentType = MapSetItemComponent.valueOf(fieldComponents[1]);
-					if (componentType == MapSetItemComponent.ITEM_EXTENDED)
+					for (DynamicStringImpl stringSemantic : (DynamicStringImpl[]) mapSetFieldsSemanticDataArray.getDataArray())
 					{
-						// If ITEM_EXTENDED then description is from itemFieldDefinitions
-						int col = Integer.parseUnsignedInt(fieldComponents[0]);
-						UUID id = null;
-						for (RestDynamicSemanticColumnInfo def : itemFieldDefinitions)
+						String[] fieldComponents = stringSemantic.getDataString().split(":");
+						MapSetItemComponent componentType = MapSetItemComponent.valueOf(fieldComponents[1]);
+						if (componentType == MapSetItemComponent.ITEM_EXTENDED)
 						{
-							if (def.columnOrder == col)
+							// If ITEM_EXTENDED then description is from itemFieldDefinitions
+							int col = Integer.parseUnsignedInt(fieldComponents[0]);
+							UUID id = null;
+							for (RestDynamicSemanticColumnInfo def : itemFieldDefinitions)
 							{
-								id = def.columnLabelConcept.getFirst();
-								break;
+								if (def.columnOrder == col)
+								{
+									id = def.columnLabelConcept.getFirst();
+									break;
+								}
 							}
+							if (id == null)
+							{
+								String msg = "Failed correlating item display field id " + col + " for item display field of type " + componentType
+										+ " with any existing extended field definition in map set";
+								log.error(msg);
+								throw new RuntimeException(msg);
+							}
+							fields.add(new RestMappingSetDisplayField(id, col));
 						}
-						if (id == null)
+						else
 						{
-							String msg = "Failed correlating item display field id " + col + " for item display field of type " + componentType
-									+ " with any existing extended field definition in map set";
-							log.error(msg);
-							throw new RuntimeException(msg);
+							UUID id = UUID.fromString(fieldComponents[0]);
+							fields.add(new RestMappingSetDisplayField(new ConceptProxy("", id), componentType));
 						}
-						fields.add(new RestMappingSetDisplayField(id, col));
-					}
-					else
-					{
-						UUID id = UUID.fromString(fieldComponents[0]);
-						fields.add(new RestMappingSetDisplayField(new ConceptProxy("", id), componentType));
 					}
 				}
 			}

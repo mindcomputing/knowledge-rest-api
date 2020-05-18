@@ -20,7 +20,7 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
+import net.sagebits.tmp.isaac.rest.api1.data.concept.RestConceptChronology;
 
 /**
  * {@link RestClassifierEquivalentSet}
@@ -37,7 +37,7 @@ public class RestClassifierEquivalentSet
 	 * The equivalent concepts of a single equivalent set.
 	 */
 	@XmlElement
-	private RestIdentifiedObject[] equivalentConcepts;
+	private RestConceptChronology[] equivalentConcepts;
 	
 	
 	protected RestClassifierEquivalentSet()
@@ -48,9 +48,9 @@ public class RestClassifierEquivalentSet
 	/**
 	 * @param equivalentSet 
 	 */
-	public RestClassifierEquivalentSet(List<RestIdentifiedObject> equivalentSet)
+	public RestClassifierEquivalentSet(List<RestConceptChronology> equivalentSet)
 	{
-		equivalentConcepts = new RestIdentifiedObject[equivalentSet.size()];
+		equivalentConcepts = new RestConceptChronology[equivalentSet.size()];
 		for (int i = 0; i < equivalentConcepts.length; i++)
 		{
 			equivalentConcepts[i] = equivalentSet.get(i);

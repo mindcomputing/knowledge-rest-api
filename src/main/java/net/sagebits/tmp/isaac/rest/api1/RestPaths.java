@@ -64,13 +64,20 @@ public class RestPaths
 	public static final String forAssemblageComponent = "forAssemblage/";
 	public static final String forReferencedComponentComponent = "forReferencedComponent/";
 	public static final String semanticDefinitionComponent = "semanticDefinition/";
+	public static final String semanticDefinitionsComponent = "semanticDefinitions/";
 	public static final String systemInfoComponent = "systemInfo/";
 	public static final String termRequestComponent = "termRequest/";
 	public static final String userComponent = "user/";
 	public static final String vetsXMLComponent = "vetsXML/";
+	public static final String rf2Component = "rf2/";
+	public static final String artifactComponent = "artifact/";
+	public static final String promoteComponent = "promote/";
+	public static final String releaseJobComponent = "releaseJob/";
+	public static final String genSctIDComponent = "genSCTIDs/";
 	public static final String ibdfComponent = "ibdf/";
 	public static final String ibdfArtifactComponent = "ibdfArtifact/";
 	public static final String terminologyTypes = "terminologyTypes/";
+	public static final String sctTerminologyTypes = "sctTerminologyTypes/";
 	public static final String modules = "modules/";
 	public static final String extendedDescriptionTypes = "extendedDescriptionTypes/";
 	public static final String externalDescriptionTypes = "externalDescriptionTypes/";
@@ -78,19 +85,19 @@ public class RestPaths
 	public static final String descriptionTypes = "descriptionTypes/";
 
 	// Workflow Based Calls
-	public static final String workflowAPIsPathComponent = apiVersionComponent + "workflow/";
-	public static final String definition = "definition/";
-	public static final String process = "process/";
-	public static final String workflowCountSummary = "workflowCountSummary/";
-	public static final String history = process + "history/";
-	public static final String locked = process + "locked/";
-	public static final String actions = process + "actions/";
-	public static final String list = process + "list/";
-	public static final String createProcess = process + "create/";
-	public static final String advanceProcess = process + "advance/";
-	public static final String processComponent = process + "component/";
-	public static final String componentSummary = process + "component/summary/";
-	public static final String lock = "lock/";
+//	public static final String workflowAPIsPathComponent = apiVersionComponent + "workflow/";
+//	public static final String definition = "definition/";
+//	public static final String process = "process/";
+//	public static final String workflowCountSummary = "workflowCountSummary/";
+//	public static final String history = process + "history/";
+//	public static final String locked = process + "locked/";
+//	public static final String actions = process + "actions/";
+//	public static final String list = process + "list/";
+//	public static final String createProcess = process + "create/";
+//	public static final String advanceProcess = process + "advance/";
+//	public static final String processComponent = process + "component/";
+//	public static final String componentSummary = process + "component/summary/";
+//	public static final String lock = "lock/";
 
 	public static final String allocateComponent = "allocate/";
 	public static final String validateComponent = "validate/";
@@ -170,12 +177,18 @@ public class RestPaths
 	public static final String systemAPIsPathComponent = apiVersionComponent + "system/";
 	public static final String systemAPIsRebuildIndexComponent = "rebuildIndex/";
 	public static final String systemAPIsClearClassifierData = "clearClassifierData/";
+	public static final String systemAPIsClearReleaseJobData = "clearReleaseJobData/";
+	public static final String systemAPIsClearQAData = "clearQAData/";
+	public static final String systemAPIsClearTokens = "clearTokens/";
+	public static final String systemAPIsDefaultEditModule = "defaultEditModule/";
 	public static final String commentAPIsPathComponent = apiVersionComponent + "comment/";
 	public static final String contentRequestAPIsPathComponent = apiVersionComponent + "request/";
 	public static final String exportAPIsPathComponent = apiVersionComponent + "export/";
+	public static final String releaseAPIsPathComponent = apiVersionComponent + "release/";
 
 	public static final String coordinateAPIsPathComponent = apiVersionComponent + "coordinate/";
 	public static final String coordinatesComponent = "coordinates/";
+	public static final String editCoordinateComponent = "editCoordinate/";
 	public static final String coordinatesTokenComponent = "coordinatesToken/";
 	public static final String taxonomyCoordinatePathComponent = "taxonomyCoordinate/";
 	public static final String languageCoordinatePathComponent = "languageCoordinate/";
@@ -194,6 +207,11 @@ public class RestPaths
 	public static final String classify = "classify/";
 	public static final String classification = "classification/";
 	public static final String classifications = "classifications/";
+	
+	public static final String qaComponent = "qa/";
+	public static final String qaAPIsPathComponent = apiVersionComponent + qaComponent;
+	public static final String run = "run/";
+	public static final String runs= "runs/";
 	
 	public static final String userDataStorePathComponent = apiVersionComponent + "userDataStore/";
 	public static final String itemsComponent = "items/";

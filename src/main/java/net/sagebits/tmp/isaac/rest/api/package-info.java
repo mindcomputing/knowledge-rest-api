@@ -1,13 +1,13 @@
 /**
  * 
- * <h1>ISAAC Web Server</h1>
+ * <h1>UTS Rest Server</h1>
  * <p>
- *   A REST server with a simple data model for accessing <u>ISAAC</u> functionality in the SOLOR data model.
+ *   A REST server with a simple data model for accessing <a href="https://github.com/logicahealth/komet">Komet</a> functionality in the SOLOR data model.
  *   Primarily supports the <u>UTS Web Editor</u>.
  * </p>
  * 
  * <p></p>
- * <h1>ISAAC FHIR Terminology Server</h1>
+ * <h1>UTS FHIR Terminology Server</h1>
  * <p>
  *   This REST server also supports the <a href="https://www.hl7.org/fhir/terminology-module.html">Terminology Module APIs</a> of the 
  *   FHIR <a href="http://hl7.org/fhir/http.html">RESTful API</a>
@@ -49,7 +49,7 @@
  * 
  * <p>
  * When using the remote auth server, auth should be done against that server, which will return an ssoToken - which can then be passed here.
- * In remote auth mode, if userName, email, password are sent here, they are delegated to the configured remote-auth server.
+ * In remote auth mode, if userName, email, password or serviceToken are sent here, they are delegated to the configured remote-auth server.
  * </p>
  * 
  * <h2>Return Types</h2>
@@ -61,7 +61,7 @@
  * 
  * <h2>Coordinate Parameters</h2>
  * <p>
- * Most ISAAC REST Server calls return results that are contingent upon the value of coordinates. Passing relevant parameters can change the results
+ * Most UTS REST Server calls return results that are contingent upon the value of coordinates. Passing relevant parameters can change the results
  * of the query, depending on the data, the request and whether or not the parameter value differs from its respective default value.
  * </p>
  *
@@ -101,8 +101,8 @@
  * <code>allowedStates</code> - specifies allowed states of the StampCoordinate. Value may be a comma delimited list of State enum names. The default
  * is "active".
  * </p><p>
- * <code>time</code> - specifies time component of StampPosition component of the StampCoordinate. Values are Long time values or "latest". The
- * default is "latest".
+ * <code>time</code> - specifies time component of StampPosition component of the StampCoordinate. Values are Long time values, "latest" or 
+ * an ISO-8601 extended local or offset date-time format, as well as the extended non-ISO form specifying the time-zone. The default is "latest".
  * </p>
  *
  * <h3><u>Language Coordinate (<code>RestLanguageCoordinate</code>) Parameters</u></h3>
@@ -183,13 +183,13 @@
  * 
  * <h2>Data Model</h2>
  * <p>
- * The only native data types required for storing terminology information within ISAAC are Concepts and Semantics. Semantics are highly flexible and configurable
+ * The only native data types required for storing terminology information within Solor are Concepts and Semantics. Semantics are highly flexible and configurable
  * constructs in the system.
  * <br>
  * <br>
  * Each semantic that is defined (at runtime, by the needs of the terminology) can be thought of as a database table of its own, in a traditional database system.
- * All of the typical elements from a terminology data model, such as descriptions, relationships, attributes, refsets, etc. - can be mapped into either ISAAC
- * concepts or ISAAC semantics, with no loss of fidelity. Furthermore, the semantics can be defined at the time that the data is imported, dynamically.
+ * All of the typical elements from a terminology data model, such as descriptions, relationships, attributes, refsets, etc. - can be mapped into either Solor
+ * concepts or Solor semantics, with no loss of fidelity. Furthermore, the semantics can be defined at the time that the data is imported, dynamically.
  * The data model of the system does not have to change to be able to store new types of data.
  * <br>
  * <br>
@@ -203,20 +203,20 @@
  * same semantic chronology, and have the same identifier. Now there are two different versions.
  * <br>
  * <br>
- * Chronology objects carry a list of all versions of the object. Chronology objects also all extend from OchreExternalizable, which means that they know how to serialize
+ * Chronology objects carry a list of all versions of the object. Chronology objects also all extend from IsaacExternalizable, which means that they know how to serialize
  * and deserialize themselves to an array of bytes - their most compact representation for storage.
  * <br>
  * <br>
  * The primary import, export, and change set formats of the system revolve around reading and writing the byte representation of the chronologies and versions from and
  * to storage.
  * <br>
- * The ISAAC-Rest APIs are layered on top of this low-level java implementation - and provide access to both the lowest level of storage (concepts, semantics, chronologies,
+ * The UTS-Rest APIs are layered on top of this low-level java implementation - and provide access to both the lowest level of storage (concepts, semantics, chronologies,
  * versions) but also provide various convenience abstractions, such as the notion of associations, mapsets, descriptions, etc.
  * <br>
  * The Rest APIs also provide extensive search capabilities across the content of the system.
  * <br>
  * <br>
- * On failure a ISAAC REST API will return an HTTP response containing a JSON-serialized RestExceptionResponse object.
+ * On failure a UTS REST API will return an HTTP response containing a JSON-serialized RestExceptionResponse object.
  * <br>
  * <table>
  * <tr>
@@ -242,12 +242,12 @@
  * <tr>
  * <td style="padding:0 15px 0 15px;">SERVICE_UNAVAILABLE</td>
  * <td style="padding:0 15px 0 15px;">503</td>
- * <td style="padding:0 15px 0 15px;">Service Unavailable - ISAAC is not yet initialized</td>
+ * <td style="padding:0 15px 0 15px;">Service Unavailable - UTS is not yet initialized</td>
  * </tr>
  * </table>
  * <br>
  * <br>
- * <img src="doc/ISAAC Core API.png"/>
+ * <img src="doc/komet Core API.png"/>
  * </p>
  */
 package net.sagebits.tmp.isaac.rest.api;

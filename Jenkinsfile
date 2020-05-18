@@ -45,5 +45,11 @@ pipeline {
 			junit allowEmptyResults: true, testResults:  'target/surefire-reports/*.xml'
 			cleanWs()
 		}
+		failure {
+			slackSend(color: '#FF0000', message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\n More info at: ${env.BUILD_URL}")
+		}
+		fixed {
+			slackSend(color: '#00FF00', message: "*${currentBuild.currentResult}:* Job ${env.JOB_NAME} build ${env.BUILD_NUMBER}\n More info at: ${env.BUILD_URL}")
+		}
 	}
 }

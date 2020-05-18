@@ -23,12 +23,16 @@ import java.util.Set;
 import java.util.UUID;
 import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
+import org.apache.logging.log4j.LogManager;
 import org.apache.mahout.math.list.IntArrayList;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
+import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestLogicCoordinate;
+import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestStampCoordinate;
 import sh.isaac.api.Get;
 import sh.isaac.api.classifier.ClassifierResults;
+import sh.isaac.api.collections.StampSequenceSet;
 
 /**
  * {@link ClassifierResult}
@@ -54,7 +58,7 @@ public class ClassifierResult implements Comparable<ClassifierResult>
 	 */	
 	@XmlElement
 	@JsonInclude(JsonInclude.Include.NON_NULL)
-	protected Long completeTime;
+	protected Long completeTime = null;
 	
 	/**
 	 * The concepts with logic graphs changed by this classification. 
@@ -106,6 +110,24 @@ public class ClassifierResult implements Comparable<ClassifierResult>
 	@XmlElement
 	protected String status;
 	
+	/**
+	 * The stamp coordinate used when this classification was executed
+	 */
+	@XmlElement
+	protected RestStampCoordinate stampCoordinate;
+	
+	/**
+	 * The logic coordinate used when this classification was executed
+	 */
+	@XmlElement
+	protected RestLogicCoordinate logicCoordinate;
+	
+	/**
+	 * The stamp version info where the classifier results were written
+	 */
+	@XmlElement
+	protected int writeStamp = 0;
+	
 	protected ClassifierResult()
 	{
 		//For jaxb
@@ -115,13 +137,31 @@ public class ClassifierResult implements Comparable<ClassifierResult>
 	{
 		this.classificationId = classificationId.toString();
 		this.launchTime = System.currentTimeMillis();
-		this.status = "Running";
+		this.status = "Queued";
 	}
 	
 	public void completed(ClassifierResults cr)
 	{
 		this.completeTime = System.currentTimeMillis();
 		this.status = "Done";
+		
+		//inconsistent hack, as there is no good serialization at the moment for these, so reuse our rest API ones.
+		//Maybe change these to the Keith byte serialization after we merge upstream and get that feature...
+		this.stampCoordinate = new RestStampCoordinate(cr.getStampCoordinate());
+		this.logicCoordinate = new RestLogicCoordinate(cr.getLogicCoordinate());
+		if (cr.getCommitRecord().isPresent())
+		{
+			StampSequenceSet sss = cr.getCommitRecord().get().getStampsInCommit();
+			if (sss.size() > 0)
+			{
+				writeStamp = sss.findFirst().getAsInt();
+			}
+			if (sss.size() != 1)
+			{
+				LogManager.getLogger().error("Unexpected number of stamps in classifier results commit: {}!", sss.size());
+			}
+		}
+		
 		
 		if (cr.getAffectedConcepts() != null && cr.getAffectedConcepts().size() > 0)
 		{

@@ -88,11 +88,11 @@ public class BaseTestCode
 		Map<String, List<String>> params = new HashMap<>();
 		params.put(AuthRequestParameters.userName, Arrays.asList(new String[] {"readOnly"}));
 		params.put(AuthRequestParameters.password, Arrays.asList(new String[] {"readOnly"}));
-		TEST_READ_ONLY_SSO_TOKEN = LookupService.getService(RestUserService.class).getUser(params, null).get().ssoToken;
+		TEST_READ_ONLY_SSO_TOKEN = LookupService.getService(RestUserService.class).getUser(params, null, cookie -> Optional.empty()).get().ssoToken;
 
 		params.put(AuthRequestParameters.userName, Arrays.asList(new String[] {"admin"}));
 		params.put(AuthRequestParameters.password, Arrays.asList(new String[] {"admin"}));
-		TEST_SSO_TOKEN = LookupService.getService(RestUserService.class).getUser(params, null).get().ssoToken;
+		TEST_SSO_TOKEN = LookupService.getService(RestUserService.class).getUser(params, null, cookie -> Optional.empty()).get().ssoToken;
 	}
 
 	public CoordinatesToken getDefaultCoordinatesToken() throws RestException

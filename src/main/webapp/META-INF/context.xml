@@ -1,0 +1,5 @@
+<Context>
+	<JarScanner>
+		<JarScanFilter defaultTldScan="false" />
+	</JarScanner>
+</Context>

@@ -42,6 +42,7 @@ import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import net.sagebits.tmp.isaac.rest.ApplicationConfig;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api1.data.enumerations.IdType;
 import net.sagebits.tmp.isaac.rest.api1.data.enumerations.RestObjectChronologyType;
 import net.sagebits.tmp.isaac.rest.api1.data.enumerations.RestSupportedIdType;
@@ -109,7 +110,10 @@ public class RestIdentifiedObject
 	@XmlElement
 	public List<RestId> altIDs;
 
-	RestIdentifiedObject()
+	/**
+	 * For JAXB / JSON serialize only.
+	 */
+	public RestIdentifiedObject()
 	{
 		// For JAXB only
 	}
@@ -129,7 +133,7 @@ public class RestIdentifiedObject
 		type = new RestObjectChronologyType(IsaacObjectType.CONCEPT);
 		if (ApplicationConfig.getInstance().isDebugDeploy())
 		{
-			description = Get.conceptDescriptionText(nid);
+			description = Util.readBestDescription(nid);
 		}
 		populateAltIds();
 	}
@@ -148,7 +152,7 @@ public class RestIdentifiedObject
 			type = new RestObjectChronologyType(internalType);
 			if (internalType == IsaacObjectType.CONCEPT)
 			{
-				description = Get.conceptDescriptionText(nid);
+				description = Util.readBestDescription(nid);
 			}
 		}
 		else
@@ -178,7 +182,7 @@ public class RestIdentifiedObject
 					nid = Get.identifierService().getNidForUuids(uuid);
 					if (ApplicationConfig.getInstance().isDebugDeploy())
 					{
-						description = Get.conceptDescriptionText(nid);
+						description = Util.readBestDescription(nid);
 					}
 					break;
 				case SEMANTIC:
@@ -206,7 +210,7 @@ public class RestIdentifiedObject
 			type = new RestObjectChronologyType(internalType);
 			if (internalType == IsaacObjectType.CONCEPT)
 			{
-				description = Get.conceptDescriptionText(nid);
+				description = Util.readBestDescription(nid);
 			}
 			populateAltIds();
 		}
@@ -227,7 +231,7 @@ public class RestIdentifiedObject
 				type = new RestObjectChronologyType(IsaacObjectType.CONCEPT);
 				if (ApplicationConfig.getInstance().isDebugDeploy())
 				{
-					description = Get.conceptDescriptionText(nid);
+					description = Util.readBestDescription(nid);
 				}
 				break;
 			case SEMANTIC:
@@ -249,7 +253,7 @@ public class RestIdentifiedObject
 				if (ApplicationConfig.getInstance().isDebugDeploy())
 				{
 					LatestVersion<DescriptionVersion> ldv = RequestInfo.get().getLanguageCoordinate().getDescription(id, RequestInfo.get().getStampCoordinate());
-					description = ldv.isPresent() ? ldv.get().getText() : Get.conceptDescriptionText(id);
+					description = ldv.isPresent() ? ldv.get().getText() : Util.readBestDescription(id);
 				}
 				break;
 			case SEMANTIC:
@@ -272,13 +276,13 @@ public class RestIdentifiedObject
 			type = new RestObjectChronologyType(internalType);
 			if (internalType == IsaacObjectType.CONCEPT)
 			{
-				description = Get.conceptDescriptionText(nid);
+				description = Util.readBestDescription(nid);
 			}
 			populateAltIds();
 		}
 		else
 		{
-			LogManager.getLogger().warn("Dan wants to know why this would happen...");
+			LogManager.getLogger().warn("Dan wants to know why this would happen... id passed: " + id, new Exception("Stacktrace!"));
 		}
 	}
 

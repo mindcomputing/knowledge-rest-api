@@ -75,7 +75,7 @@ public class RestCommentVersion extends RestCommentVersionBase
 		super();
 	}
 
-	public RestCommentVersion(DynamicVersion<?> commentSemantic)
+	public RestCommentVersion(DynamicVersion commentSemantic)
 	{
 		super(commentSemantic.getData()[0].getDataObject().toString(),
 				(commentSemantic.getData().length > 1 && commentSemantic.getData()[1] != null) ? commentSemantic.getData()[1].getDataObject().toString() : null);

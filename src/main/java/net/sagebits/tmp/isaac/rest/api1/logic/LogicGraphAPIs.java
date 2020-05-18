@@ -119,14 +119,31 @@ public class LogicGraphAPIs
 	 * 
 	 * @param id - A UUID or nid, of a concept identifying the concept at the root of the logic graph
 	 * @param expand - comma separated list of fields to expand. Supports 
-	 *     <br> 'versionsAll' - when supplied, all versions of the logic graph will be returned attached to the chronology.  Note that, this only includes 
-	 *         all versions for the top level logic graph chronology.  If 'version' is also specified, the version of the referenced component returned for 
-	 *         each version of the logic graph will be the most appropriate version for the top level logic graph.  In other words, the STAMP of the logic graph 
-	 *         version being returned is used to calculate the appropriate stamp for the referenced component versions, when they are looked up.
-	 *         Sorted newest to oldest.
+	 *     <br> 'versionsAll' - <p>when supplied, all versions of the logic graph will be returned attached to the chronology.  Note that, this only includes 
+	 *         all versions for the top level logic graph chronology.  
+	 *      <br>
+	 *         If 'version' is also specified, the version of the referenced component returned for each version of the logic graph will be the most appropriate 
+	 *         version for version of the logic graph being rendered.  In other words, the STAMP of the logic graph version being returned is used to calculate 
+	 *         the appropriate stamp for the referenced component versions, when they are looked up.  This leads to a situation, however, where there may be is 
+	 *         no version returned that is the 'latest' for all components, if historical data isn't loaded.
+	 *     <br>
+	 *         Because the stamp of the logic graph being returned might be older than the stamps of the available referenced components, we always return two copies 
+	 *         of the newest version when versionsAll is specified.  The first - position 0 in the return - will be calculated with the stamp supplied in the 
+	 *         request for all components.  The second - position 1 - will contain the same top level version, but any referenced components will have been rendered 
+	 *         with a stamp from the logic graph version.  Beyond the first two positions, all additional versions are sorted newest to oldest.
+	 *      <br>
+	 *         In the cases of metadata, due to how frequently it is involved in logic graphs, and its likelyhood to be newer than the logic graph, 
+	 *         the system will fall back to the latest stamp for the referenced components, if a closer stamp isn't present (but only when the referenced item is 
+	 *         from the metadata tree)
+	 *      <br>
+	 *         In other cases, the version objects will simply not be returned, and callers should be prepared for them to be null, even when requested.  This also 
+	 *         applies to fields such as convenience descriptions, which will be null, if no description was available for the given stamp.
+	 *         </p>
 	 *     <br> 'versionsLatestOnly' - ignored if specified in combination with versionsAll
 	 *     <br> 'version'  - to include RestConceptVersion objects for referenced concepts, such as RestConceptNode and RestTypedConnectorNode types in the graph.
-	 *       Only applicable when versionsAll or versionsLatestOnly is also specified.
+	 *       Only applicable when versionsAll or versionsLatestOnly is also specified.  For versionsLatestOnly, this also triggers the duplication of the newest 
+	 *       versions - the first calculated as latest for all components, and the second, where the referenced components are rendered with the logic graph version 
+	 *       stamp.
 	 *     <br> 'countParents' - may only be specified in combination with 'version' - will cause the expanded version to also have the parent count populated.
 	 *         Only applicable when versionsAll or versionsLatestOnly is also specified.
 	 *     <br> 'includeParents' - may only be specified in combination with 'version' - will cause the expanded version to also have the first-level parent list 
@@ -141,7 +158,7 @@ public class LogicGraphAPIs
 	 *     returned.  This can be set to one or more names or ids from the /1/id/types or the value 'ANY'.  Requesting IDs that are unneeded will harm 
 	 *     performance. 
 	 * 
-	 * @return the concept chronology object
+	 * @return the semantic chronology object
 	 * @throws RestException
 	 */
 	@GET

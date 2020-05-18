@@ -41,6 +41,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import javax.ws.rs.client.WebTarget;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
@@ -52,6 +53,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import javafx.util.Pair;
 import net.sagebits.tmp.isaac.rest.api.exceptions.RestException;
 import net.sagebits.tmp.isaac.rest.tokens.EditToken;
+import net.sagebits.uts.auth.data.SSOToken;
 import net.sagebits.uts.auth.rest.api.exceptions.RestExceptionResponse;
 import net.sagebits.uts.auth.rest.api1.data.RestUser;
 import net.sagebits.uts.auth.rest.session.AuthRequestParameters;
@@ -75,8 +77,7 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 {
 	private static Logger log = LogManager.getLogger(RestUserServiceAuthIntegrated.class);
 	
-	//TODO add a mechanism to force role-recheck, instead of polling
-	private static final long userRoleMaxAge = 1000l * 60l * 5l;  // recheck roles every 5 minutes
+	private static final long userRoleMaxAge = 1000l * 60l * 5l;  // recheck roles every 5 minutes, but the auth server also now invalidates roles via the clear call.
 	private static final long cleanUserCache = 1000l * 60l * 30l;  // clear any cached info after 30 minutes  
 	
 	private static final String ANON_TOKEN = "ANON_TOKEN";
@@ -111,31 +112,41 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 	
 
 	/**
-	 * @see net.sagebits.tmp.isaac.rest.session.RestUserService#getUser(java.util.Map, net.sagebits.tmp.isaac.rest.tokens.EditToken)
+	 * @see net.sagebits.tmp.isaac.rest.session.RestUserService#getUser(Map, EditToken, Function)
 	 */
 	@Override
-	public Optional<RestUser> getUser(Map<String, List<String>> requestParameters, EditToken editToken) throws RestException
+	public Optional<RestUser> getUser(Map<String, List<String>> requestParameters, EditToken editToken, Function<String, Optional<String>> cookieValueProvider) throws RestException
 	{
 		Optional<RestUser> restUser = Optional.empty();
-		if (requestParameters.containsKey(AuthRequestParameters.ssoToken) || requestParameters.containsKey(AuthRequestParameters.googleToken))
+		if (requestParameters.containsKey(AuthRequestParameters.ssoToken) || requestParameters.containsKey(AuthRequestParameters.serviceToken) 
+				|| cookieValueProvider.apply(SSOToken.cookieName).isPresent())
 		{
+			String token = null;
 			try
 			{
-				String token;
 				String tokenType;
-				if (!StringUtils.isBlank(requestParameters.get(AuthRequestParameters.ssoToken).get(0)))
+				if (StringUtils.isNotBlank(RequestInfoUtils.getFirstParameterValue(requestParameters, AuthRequestParameters.ssoToken)))
 				{
-					token = requestParameters.get(AuthRequestParameters.ssoToken).get(0);
+					token = RequestInfoUtils.getFirstParameterValue(requestParameters, AuthRequestParameters.ssoToken);
 					tokenType = AuthRequestParameters.ssoToken;
+				}
+				else if (StringUtils.isNotBlank(cookieValueProvider.apply(SSOToken.cookieName).orElse("")))
+				{
+					token = cookieValueProvider.apply(SSOToken.cookieName).get();
+					tokenType = AuthRequestParameters.ssoToken;
+				}
+				else if (StringUtils.isNotBlank(RequestInfoUtils.getFirstParameterValue(requestParameters, AuthRequestParameters.serviceToken)))
+				{
+					token = RequestInfoUtils.getFirstParameterValue(requestParameters, AuthRequestParameters.serviceToken);
+					tokenType = AuthRequestParameters.serviceToken;
 				}
 				else
 				{
-					token = requestParameters.get(AuthRequestParameters.googleToken).get(0);
-					tokenType = AuthRequestParameters.googleToken;
+					throw new RuntimeException("Internal error");
 				}
 
 				Pair<RestUser, Long> userInfo = ssoTokenCache.get(token);
-				if (isCachedTokenValid(userInfo, token))
+				if (isCachedTokenValid(userInfo, token, tokenType))
 				{
 					restUser = Optional.ofNullable(userInfo.getKey());
 				}
@@ -147,11 +158,24 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 					if (restUser.isPresent())
 					{
 						ssoTokenCache.put(restUser.get().ssoToken, new Pair<>(restUser.get(), System.currentTimeMillis()));
+						
+						//Note that this read always returns a NEW ssoToken, but this new ssoToken isn't returned to the caller here (in most calls)
+						//Their future requests will likely still be using the same token they just passed us (which was valid)
+						//So also cache the token they passed, but with the up-to-date user roles / info we just read.
+						ssoTokenCache.put(token, new Pair<>(restUser.get(), System.currentTimeMillis()));
 					}
 				}
 			}
 			catch (RestException e)
 			{
+				throw e;
+			}
+			catch (SecurityException e)
+			{
+				if (token != null)
+				{
+					ssoTokenCache.remove(token);
+				}
 				throw e;
 			}
 			catch (Exception e)
@@ -181,7 +205,7 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 		{
 			//see if the admin service allows anonymous read
 			Pair<RestUser, Long> userInfo = ssoTokenCache.get(ANON_TOKEN);
-			if (isCachedTokenValid(userInfo, ANON_TOKEN))
+			if (isCachedTokenValid(userInfo, ANON_TOKEN, AuthRequestParameters.ssoToken))
 			{
 				restUser = Optional.ofNullable(userInfo.getKey());
 			}
@@ -209,11 +233,11 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 		return restUser;
 	}
 	
-	private boolean isCachedTokenValid(Pair<RestUser, Long> cachedUserInfo, String token)
+	private boolean isCachedTokenValid(Pair<RestUser, Long> cachedUserInfo, String token, String tokenType)
 	{
 		if (cachedUserInfo != null)
 		{
-			log.debug("SSOToken cache hit for token " + token);
+			log.debug("SSOToken cache hit for token " + tokenType);
 			if ((System.currentTimeMillis() - cachedUserInfo.getValue()) > userRoleMaxAge)
 			{
 				log.debug("User cache hit, but roles expired - last read at {} now {} - requesting user info", cachedUserInfo.getValue(), System.currentTimeMillis());
@@ -233,6 +257,10 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 					return true;
 				}
 			}
+		}
+		else
+		{
+			log.debug("SSOToken cache miss for token " + tokenType);
 		}
 		return false;
 	}
@@ -290,7 +318,7 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 				String jsonResultString = remoteRequestJSON(url, params);
 				return Optional.of(deserializeRestUser(jsonResultString));
 			}
-			catch (RestException e)
+			catch (RestException | SecurityException e)
 			{
 				if (throwAuthError)
 				{
@@ -316,7 +344,7 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 	 * @return
 	 * @throws RestException
 	 */
-	private Optional<RestUser> getUser(String token, String tokenTypeParam) throws RestException
+	private Optional<RestUser> getUser(String token, String tokenTypeParam) throws RestException, SecurityException
 	{
 		try
 		{
@@ -326,7 +354,7 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 			{
 				params.put("dbUUID", dbID.toString());
 			}
-			log.debug("Sending token type '{}' - '{}' and DB '{}'", tokenTypeParam, token, dbID);
+			log.debug("Sending token type '{}' and DB '{}'", tokenTypeParam, dbID);
 			
 			URL url = new URL(remoteAuthURL + "/1/auth/user");
 			
@@ -376,7 +404,7 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 		}
 	}
 	
-	private String remoteRequestJSON(URL url, Map<String, String> params) throws RestException
+	private String remoteRequestJSON(URL url, Map<String, String> params) throws RestException, SecurityException
 	{
 		ClientService clientService = LookupService.getService(ClientService.class);
 		WebTarget target = clientService.getClient().target(getTargetFromUrl(url));
@@ -393,20 +421,27 @@ public class RestUserServiceAuthIntegrated implements RestUserService
 		{
 			log.info("Auth request returned ok");
 		}
-		else if (response.getStatus() == Status.UNAUTHORIZED.getStatusCode())
+		else if (response.getStatus() == Status.UNAUTHORIZED.getStatusCode() || response.getStatus() == Status.FORBIDDEN.getStatusCode())
 		{
-			log.info("User unauthorized");
 			RestExceptionResponse errorResponse = response.readEntity(RestExceptionResponse.class);
-			throw new RestException("Unauthorized - " + errorResponse.conciseMessage);
+			log.debug("User unauthorized {}", errorResponse.conciseMessage);
+			throw new SecurityException("Unauthorized - " + errorResponse.conciseMessage);
 		}
 		else
 		{
 			log.error("Failed performing GET " + url.toString() + " with CODE=" + response.getStatus() + " and REASON=" + response.getStatusInfo());
-			throw new RestException("Unable to read user from auth service");
+			throw new SecurityException("Unable to read user from auth service");
 		}
 		
 		String responseJson = response.readEntity(String.class);
 		log.trace("Request '{}' returned '{}'", url.toString(), responseJson);
 		return responseJson;
+	}
+
+	@Override
+	public void clearCache()
+	{
+		ssoTokenCache.clear();
+		log.debug("token cache cleared");
 	}
 }

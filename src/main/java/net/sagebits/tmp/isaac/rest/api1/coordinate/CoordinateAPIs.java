@@ -31,7 +31,6 @@
 package net.sagebits.tmp.isaac.rest.api1.coordinate;
 
 import java.util.Optional;
-import java.util.UUID;
 import javax.annotation.security.RolesAllowed;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
@@ -51,6 +50,7 @@ import net.sagebits.tmp.isaac.rest.api1.data.RestCoordinatesToken;
 import net.sagebits.tmp.isaac.rest.api1.data.RestEditToken;
 import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
 import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestCoordinates;
+import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestEditCoordinate;
 import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestLanguageCoordinate;
 import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestLogicCoordinate;
 import net.sagebits.tmp.isaac.rest.api1.data.coordinate.RestManifoldCoordinate;
@@ -65,6 +65,7 @@ import net.sagebits.uts.auth.rest.session.AuthRequestParameters;
 import sh.isaac.MetaData;
 import sh.isaac.api.Get;
 import sh.isaac.api.coordinate.EditCoordinate;
+import sh.isaac.api.observable.coordinate.ObservableEditCoordinate;
 import sh.isaac.utility.Frills;
 
 /**
@@ -81,6 +82,9 @@ public class CoordinateAPIs
 
 	@Context
 	private SecurityContext securityContext;
+	
+	//For reading default edit module and edit path from the values stored in the DB.  Lazy load.
+	private static ObservableEditCoordinate ec;
 
 	/**
 	 * 
@@ -112,7 +116,8 @@ public class CoordinateAPIs
 	 * @param language specifies language of the LanguageCoordinate. Value may be a language UUID, int id or one of the following terms: "english",
 	 *            "spanish", "french", "danish", "polish", "dutch", "lithuanian", "chinese", "japanese", or "swedish". The default is "english".
 	 *            If a concept is specified, it must be a direct child of the concept 'Language (SOLOR)' - f56fa231-10f9-5e7f-a86d-a1d61b5b56e3.
-	 * @param modules specifies modules of the StampCoordinate. Value may be a comma delimited list of module concept UUID or int ids.
+	 * @param modules specifies modules of the StampCoordinate. Value may be a comma delimited list of module concept UUID or int ids.  Internally, 
+	 *     any supplied module is expanded to also include all child modules of the specified module.
 	 * @param path specifies path component of StampPosition component of the StampCoordinate. Values is path UUID, int id or the term "development"
 	 *            or "master". The default is "development".
 	 * @param precedence specifies precedence of the StampCoordinate. Values are either "path" or "time". The default is "path".
@@ -188,6 +193,30 @@ public class CoordinateAPIs
 		log.debug("Returning REST Coordinates...");
 
 		return coordinates;
+	}
+	
+	/**
+	 * 
+	 * This method returns an object comprising all coordinate parameters, essentialy, for decoding an existing editToken.
+	 * Calling this method with an editToken does NOT invalidate the editToken, it can still be used for another edit.
+	 * 
+	 * @param editToken specifies an explicit serialized CoordinatesToken string specifying all edit coordinate parameters. A EditToken may be
+	 *            obtained by a separate (prior) call to getEditToken().  Individual parameters like module and path can be specified in addition
+	 *            to the editToken, and they will override the values from the editToken.
+	 * 
+	 * @return RestEditCoordinates Object containing all coordinates.
+	 * @throws RestException
+	 */
+	@GET
+	@Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+	@Path(RestPaths.editCoordinateComponent)
+	public RestEditCoordinate getEditCoordinates(@QueryParam(RequestParameters.editToken) String editToken) throws RestException
+	{
+		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.EDIT_TOKEN_PARAM_NAMES);
+
+		log.debug("Returning Edit coordinate...");
+
+		return new RestEditCoordinate(RequestInfo.get().getEditCoordinate());
 	}
 
 	/**
@@ -303,7 +332,7 @@ public class CoordinateAPIs
 	/**
 	 * 
 	 * This method returns a <code>RestEditToken</code>, which is an encrypted String that is used internally
-	 * to authenticate and convey user and session information between KOMET and PRISME. Information conveyed includes
+	 * to authenticate and convey user and session information between the editor and the manager. Information conveyed includes
 	 * user, module, and path concepts.  Each EditToken expires after a set amount of time
 	 * and is otherwise usable.
 	 * 
@@ -320,6 +349,7 @@ public class CoordinateAPIs
 	 * This method requires at least EDITOR permissions
 	 * 
 	 * @param ssoToken - optional - a previously issued token that represents an authenticated user.
+	 * @param serviceToken - optional - a service token assigned for a user to identify them
 	 * @param userName - optional - a user name to authenticate against local auth - must be used with password
 	 * @param email  - optional - an e-mail address (instead of a username) to authenticate against local auth - must be used with password
 	 * @param password  - optional - the password to authenticate against local in combination with  username or email.
@@ -337,6 +367,7 @@ public class CoordinateAPIs
 	@RolesAllowed({ SystemRoleConstants.AUTOMATED, SystemRoleConstants.ADMINISTRATOR, SystemRoleConstants.SYSTEM_MANAGER, SystemRoleConstants.CONTENT_MANAGER,
 		SystemRoleConstants.EDITOR})
 	public RestEditToken getEditToken(@QueryParam(AuthRequestParameters.ssoToken) String ssoToken, // Applied in RestContainerRequestFilter
+			@QueryParam(AuthRequestParameters.serviceToken) String serviceToken, // Applied in RestContainerRequestFilter
 			@QueryParam(AuthRequestParameters.email) String email, // Applied in RestContainerRequestFilter
 			@QueryParam(AuthRequestParameters.userName) String userName, // Applied in RestContainerRequestFilter
 			@QueryParam(AuthRequestParameters.password) String password, // Applied in RestContainerRequestFilter
@@ -347,6 +378,7 @@ public class CoordinateAPIs
 	{
 		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), 
 				AuthRequestParameters.ssoToken,
+				AuthRequestParameters.serviceToken,
 				AuthRequestParameters.email,
 				AuthRequestParameters.userName,
 				AuthRequestParameters.password, 
@@ -361,15 +393,33 @@ public class CoordinateAPIs
 			Integer module = null;
 			Integer path = null;
 			
-			EditCoordinate defaultEditCoordinate = RequestInfo.getDefaultEditCoordinate();
-			
 			if (StringUtils.isNotBlank(editModule))
 			{
 				module = RequestInfoUtils.getConceptNidFromParameter(RequestParameters.editModule, editModule);
 			}
+			else
+			{
+				module = getEditCoordinate().getModuleNid();
+				
+				try
+				{
+					//If this was set to something like the solor module, we instead, want it to follow our "edit module" pattern, so adjust
+					//as necessary
+					module = Frills.createAndGetDefaultEditModule(module);
+				}
+				catch (Exception e)
+				{
+					log.error("Problem determining edit module!",  e);
+					throw e;  //will let it be handled higher, as an unexpected internal error.  Just wanted better logging.
+				}
+			}
 			if (StringUtils.isNotBlank(editPath))
 			{
 				path = RequestInfoUtils.getConceptNidFromParameter(RequestParameters.editPath, editPath);
+			}
+			else
+			{
+				path = getEditCoordinate().getPathNid();
 			}
 
 			Optional<RestUser> user = RequestInfo.get().getUser();
@@ -379,8 +429,7 @@ public class CoordinateAPIs
 				throw new RestException("Edit token cannot be constructed without user information!");
 			}
 			
-			return new RestEditToken(new EditToken(Get.identifierService().getNidForUuids(user.get().userId),
-					module != null ? module : defaultEditCoordinate.getModuleNid(), path != null ? path : defaultEditCoordinate.getPathNid()));
+			return new RestEditToken(new EditToken(Get.identifierService().getNidForUuids(user.get().userId), module, path));
 		}
 		else
 		{
@@ -394,21 +443,38 @@ public class CoordinateAPIs
 	 * Get the module identifier that should be used (by default) for edits on a particular terminology.  
 	 * You can get the allowed input parameters from 1/system/terminologyTypes 
 	 * 
-	 * @param id - a nid or UUID of a concept that represents a terminology in the system. This should be a direct child of
-	 *            {@link MetaData#MODULE____SOLOR}
+	 * @param id - optional - a nid or UUID of a concept that represents a terminology in the system. This should be a direct child of
+	 *            {@link MetaData#MODULE____SOLOR}.  If not provided, the returned edit module will be the system default edit module.
 	 * @return The id of the concept that represents the default 'edit' module for this content.  This is the module where most
 	 *            in-progress work is put, until the work goes through a release process. 
 	 * @throws RestException
 	 */
 	@GET
 	@Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
-	@Path(RestPaths.editModule + "{" + RequestParameters.id + "}")
+	@Path(RestPaths.editModule + "{" + RequestParameters.id + " : .*}")
 	public RestIdentifiedObject getEditModule(@PathParam(RequestParameters.id) String id) throws RestException
 	{
 		RequestParameters.validateParameterNamesAgainstSupportedNames(RequestInfo.get().getParameters(), RequestParameters.id, 
 				RequestParameters.COORDINATE_PARAM_NAMES);
 		
-		//This may actually create a concept, but internally, the concept is recorded as a system owned concept, not one created by the user.
-		return new RestIdentifiedObject(Frills.createAndGetDefaultEditModule(ConceptAPIs.findConceptChronology(id).getNid()));
+		if (StringUtils.isNotBlank(id))
+		{
+			//This may actually create a concept, but internally, the concept is recorded as a system owned concept, not one created by the user.
+			return new RestIdentifiedObject(Frills.createAndGetDefaultEditModule(ConceptAPIs.findConceptChronology(id).getNid()));
+		}
+		else
+		{
+			return new RestIdentifiedObject(getEditCoordinate().getModuleNid());
+		}
+	}
+	
+	
+	private EditCoordinate getEditCoordinate()
+	{
+		if (ec == null)
+		{
+			ec = Get.configurationService().getGlobalDatastoreConfiguration().getDefaultEditCoordinate();
+		}
+		return ec;
 	}
 }

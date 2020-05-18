@@ -118,7 +118,6 @@ public class RestSemanticChronology
 	 * @param includeLatestVersion
 	 * @param includeNested
 	 * @param populateReferencedDetails - if true, populate a description for the referencedComponent
-	 * @param stampForReferencedDetailsAndLatestVersion - optional - defaults to stamp in RequestInfo, if not provided
 	 * @throws RestException
 	 */
 	public RestSemanticChronology(SemanticChronology sc, boolean includeAllVersions, boolean includeLatestVersion, boolean includeNested,
@@ -138,8 +137,7 @@ public class RestSemanticChronology
 				SemanticChronology referencedComponentSemantic = Get.assemblageService().getSemanticChronology(referencedComponent.nid);
 				if (VersionType.DESCRIPTION == referencedComponentSemantic.getVersionType())
 				{
-					LatestVersion<DescriptionVersion> ds = referencedComponentSemantic
-							.getLatestVersion(RequestInfo.get().getStampCoordinate());
+					LatestVersion<DescriptionVersion> ds = referencedComponentSemantic.getLatestVersion(RequestInfo.get().getStampCoordinate());
 					Util.logContradictions(log, ds);
 					if (ds.isPresent())
 					{
@@ -175,6 +173,15 @@ public class RestSemanticChronology
 						return -1 * Long.compare(o1.semanticVersion.time, o2.semanticVersion.time);
 					}
 				});
+				
+				//When returning all versions, we still want a "current" view of the semantic.  So we always return the first 
+				//version as calcuated with the stamp set to the requested stamp, rather than the version stamp.
+				LatestVersion<SemanticVersion> latest = sc.getLatestVersion(RequestInfo.get().getStampCoordinate());
+				if (latest.isPresent())
+				{
+					versions.add(0, RestSemanticVersion.buildRestSemanticVersion(latest.get(), false, includeNested, false, true));
+				}
+				
 			}
 			else if (includeLatestVersion)
 			{

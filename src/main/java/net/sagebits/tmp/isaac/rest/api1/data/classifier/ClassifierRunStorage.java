@@ -36,9 +36,6 @@ public class ClassifierRunStorage
 {
 	private static Logger log = LogManager.getLogger();
 	private static final String CLASSIFICATION_STORE = "classificationStore";
-	private static final UUID hashNamespace = UUID.randomUUID();  //We randomize this, because the ids given back by classifier runs are simple
-	//ints, which are only unique in a JVM.  We want to store classifier results, so I need globally unique IDs.  Creating UUIDs from the ints, 
-	//combined with a per-jvm unique namespace will give me globally unique ids.
 	
 	/**
 	 * For use by the read API to read back the classifier results. 
@@ -102,17 +99,58 @@ public class ClassifierRunStorage
 		Get.metaContentService().<UUID, String>openStore(CLASSIFICATION_STORE).put(classifyKey, temp);
 	}
 	
-	public static UUID classifyStarted(int classifierTaskId)
+	/**
+	 * Store the initial timestamp, with a status of queued.
+	 * @param classifierTaskId
+	 */
+	public static void classifyQueued(UUID classifierTaskId)
 	{
-		final UUID classifyKey = UuidT5Generator.get(hashNamespace, "classifierHash" + classifierTaskId);
-		String temp = JsonWriter.objectToJson(new ClassifierResult(classifyKey));
+		String temp = JsonWriter.objectToJson(new ClassifierResult(classifierTaskId));
+		Get.metaContentService().<UUID, String>openStore(CLASSIFICATION_STORE).put(classifierTaskId, temp);
+	}
+	
+	/**
+	 * Change status to running, if currently queued.
+	 * @param classifyKey
+	 */
+	public static void classifyStarted(UUID classifyKey)
+	{
+		ClassifierResult rcr = getClassificationResults(classifyKey);
+		//clearStoredData called during classify
+		if (rcr == null)
+		{
+			rcr = new ClassifierResult(classifyKey);
+		}
+		if (rcr.status.equals("Queued"))
+		{
+			rcr.status = "Running";
+		}
+		String temp = JsonWriter.objectToJson(rcr);
+		log.debug("Classification Running: " + classifyKey);
 		Get.metaContentService().<UUID, String>openStore(CLASSIFICATION_STORE).put(classifyKey, temp);
-		return classifyKey;
 	}
 	
 	public static void clearStoredData()
 	{
 		Get.metaContentService().<UUID, String>openStore(CLASSIFICATION_STORE).clear();
 		log.info("Classifier run data cleared");
+	}
+	
+	/**
+	 * Iterate the stored classifer executions, and mark any that are still active as failed.
+	 * This would typically only be called on system startup, to clean up after any classifier executions that were abandoned due to a server shutdown.
+	 */
+	public static void cleanAbandoned()
+	{
+		for (UUID uuid : Get.metaContentService().<UUID, String>openStore(CLASSIFICATION_STORE).keySet()) 
+		{
+			ClassifierResult cr = getClassificationResults(uuid);
+			if (cr != null && cr.completeTime == null)
+			{
+				cr.completeTime = System.currentTimeMillis();
+				cr.status = "System shutdown prior to completion";
+				Get.metaContentService().<UUID, String>openStore(CLASSIFICATION_STORE).put(uuid, JsonWriter.objectToJson(cr));
+			}
+		}
 	}
 }

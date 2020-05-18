@@ -40,6 +40,7 @@ import javax.ws.rs.HttpMethod;
 import javax.ws.rs.Priorities;
 import javax.ws.rs.container.ContainerRequestContext;
 import javax.ws.rs.container.ContainerRequestFilter;
+import javax.ws.rs.core.Cookie;
 import javax.ws.rs.ext.Provider;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -95,7 +96,7 @@ public class RestContainerRequestFilter implements ContainerRequestFilter
 		
 		if (!user.isPresent())
 		{
-			throw new RestException("No user information was supplied, and anonymous read access to this service is disabled");
+			throw new SecurityException("No user information was supplied, and anonymous read access to this service is disabled");
 		}
 
 		// Configure Security Context here
@@ -110,14 +111,16 @@ public class RestContainerRequestFilter implements ContainerRequestFilter
 	public void filter(ContainerRequestContext requestContext) throws IOException
 	{
 		LOG.debug("{} - Running filter on request {} {}", RequestInfo.get().getUniqueId(), requestContext.getRequest().getMethod(), requestContext.getUriInfo().getPath(true));
-		RequestInfo.get();  // Just setting the start time of the request
+		RequestInfo.get().setContext(requestContext);  // Just setting the start time of the request, and the context
 		if (requestContext.getUriInfo().getPathParameters().size() > 0)
 		{
 			LOG.debug("{} - Path parameters: {}", RequestInfo.get().getUniqueId(), requestContext.getUriInfo().getPathParameters().keySet());
 			for (Map.Entry<String, List<String>> parameter : requestContext.getUriInfo().getPathParameters().entrySet())
 			{
 				LOG.debug("{} - Path parameter \"{}\"=\"{}\"", RequestInfo.get().getUniqueId(), parameter.getKey(), 
-						parameter.getKey().equals(AuthRequestParameters.password) ? "***" : parameter.getValue());
+						parameter.getKey().equals(AuthRequestParameters.password) ||
+						parameter.getKey().equals(AuthRequestParameters.serviceToken) ||
+						parameter.getKey().equals(AuthRequestParameters.ssoToken) ?  "***" + parameter.getValue().hashCode() + "***" : parameter.getValue());
 			}
 		}
 
@@ -132,7 +135,9 @@ public class RestContainerRequestFilter implements ContainerRequestFilter
 			for (Map.Entry<String, List<String>> parameter : queryParams.entrySet())
 			{
 				LOG.debug("{} - Query parameter \"{}\"=\"{}\"", RequestInfo.get().getUniqueId(), parameter.getKey(), 
-						parameter.getKey().equals(AuthRequestParameters.password) ? "***" : parameter.getValue());
+						parameter.getKey().equals(AuthRequestParameters.password)  ||
+						parameter.getKey().equals(AuthRequestParameters.serviceToken) ||
+						parameter.getKey().equals(AuthRequestParameters.ssoToken) ?  "***" + parameter.getValue().hashCode() + "***" : parameter.getValue());
 			}
 		}
 
@@ -144,7 +149,15 @@ public class RestContainerRequestFilter implements ContainerRequestFilter
 
 		try
 		{
-			RequestInfo.get().readAll(queryParams, requestContext.getUriInfo().getPath(true));
+			RequestInfo.get().readAll(queryParams, requestContext.getUriInfo().getPath(true), cookieName -> 
+			{
+				Cookie c = requestContext.getCookies().get(cookieName);
+				if (c != null)
+				{
+					return Optional.of(c.getValue());
+				}
+				return Optional.empty();
+			});
 
 			// If they are asking for an edit token, or attempting to do a write, we need a valid editToken.
 			if (requestContext.getUriInfo().getPath().contains(RestPaths.writePathComponent)
@@ -160,24 +173,28 @@ public class RestContainerRequestFilter implements ContainerRequestFilter
 							// VuidWriteAPIs does not require or return an EditCoordinate,
 							// so calling isValidForWrite(), which invalidates the existing token, requiring its renewal,
 							// will break things. Therefore, do not call isValidForWrite() for vuidAPIsPathComponent
-							// Likewise with the user data store reads - they need a token for the user name, but don't do a write, 
-							// and don't return an updated token.
-							&& !requestContext.getUriInfo().getPath().contains(RestPaths.vuidAPIsPathComponent)
-							&& !requestContext.getUriInfo().getPath().contains(RestPaths.userDataStorePathComponent))
+							&& !requestContext.getUriInfo().getPath().contains(RestPaths.vuidAPIsPathComponent))
 					{
 	
 						// If it is a write request, the edit token needs to be valid for write.
 						if (!et.isValidForWrite())
 						{
-							throw new RestException("Edit Token is no longer valid for write - please renew the token.");
+							throw new SecurityException("Edit Token is no longer valid for write - please renew the token.");
 						}
 					}
 					RequestInfo.get().getEditCoordinate();
 				}
 				else if (requestContext.getUriInfo().getPath().contains(RestPaths.writePathComponent))
 				{
-					//If this was a /write/ call, and theydidn't pass an edit token, we fail.
-					throw new RestException("Edit Token is required for /write/ operations.");
+					if (requestContext.getUriInfo().getPath().contains(RestPaths.userDataStorePathComponent))
+					{
+						LOG.trace("Allow access to user store write APIs");
+					}
+					else
+					{
+						//If this was a /write/ call, and they didn't pass an edit token, we fail.
+						throw new RestException("Edit Token is required for /write/ operations.");
+					}
 				}
 			}
 
@@ -188,6 +205,10 @@ public class RestContainerRequestFilter implements ContainerRequestFilter
 			throw e;
 		}
 		catch (IOException e)
+		{
+			throw e;
+		}
+		catch (SecurityException e)
 		{
 			throw e;
 		}

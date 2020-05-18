@@ -20,7 +20,6 @@
 package net.sagebits.tmp.isaac.rest.api1.data.enumerations;
 
 import javax.xml.bind.annotation.XmlRootElement;
-import sh.isaac.api.coordinate.PremiseType;
 
 /**
  * 
@@ -48,8 +47,8 @@ public class RestDescriptionStyle extends Enumeration
 
 	public static RestDescriptionStyle[] getAll()
 	{
-		RestDescriptionStyle[] result = new RestDescriptionStyle[PremiseType.values().length];
-		for (int i = 0; i < PremiseType.values().length; i++)
+		RestDescriptionStyle[] result = new RestDescriptionStyle[DescriptionStyle.values().length];
+		for (int i = 0; i < DescriptionStyle.values().length; i++)
 		{
 			result[i] = new RestDescriptionStyle(DescriptionStyle.values()[i]);
 		}

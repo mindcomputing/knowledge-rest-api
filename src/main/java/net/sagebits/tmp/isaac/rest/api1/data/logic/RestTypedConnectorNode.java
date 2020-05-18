@@ -35,6 +35,7 @@ import javax.xml.bind.annotation.XmlSeeAlso;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
 import com.webcohesion.enunciate.metadata.json.JsonSeeAlso;
 import net.sagebits.tmp.isaac.rest.ExpandUtil;
+import net.sagebits.tmp.isaac.rest.Util;
 import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
 import net.sagebits.tmp.isaac.rest.api1.data.concept.RestConceptVersion;
 import net.sagebits.tmp.isaac.rest.session.RequestInfo;
@@ -43,9 +44,12 @@ import sh.isaac.api.chronicle.LatestVersion;
 import sh.isaac.api.component.concept.ConceptChronology;
 import sh.isaac.api.component.concept.ConceptVersion;
 import sh.isaac.api.coordinate.ManifoldCoordinate;
+import sh.isaac.api.coordinate.StampCoordinate;
 import sh.isaac.api.externalizable.IsaacObjectType;
+import sh.isaac.model.coordinate.ManifoldCoordinateImpl;
 import sh.isaac.model.logic.node.external.TypedNodeWithUuids;
 import sh.isaac.model.logic.node.internal.TypedNodeWithNids;
+import sh.isaac.utility.Frills;
 
 /**
  * 
@@ -88,7 +92,8 @@ public abstract class RestTypedConnectorNode extends RestConnectorNode
 	RestConceptVersion connectorTypeConceptVersion;
 	
 	/**
-	 * The String text description of the concept referred to by the connectorTypeConcept
+	 * The String text description of the concept referred to by the connectorTypeConcept.  This may be null, depending on 
+	 * the stamps involved in the request, if no description is available given the path.
 	 */
 	@XmlElement
 	String connectorTypeDescription;
@@ -123,15 +128,38 @@ public abstract class RestTypedConnectorNode extends RestConnectorNode
 	
 	private void finishSetup(ManifoldCoordinate coordForRead)
 	{
-		connectorTypeDescription = Get.conceptService().getSnapshot(coordForRead).conceptDescriptionText(connectorTypeConcept.nid);
+		Get.conceptService().getSnapshot(coordForRead).getDescriptionOptional(connectorTypeConcept.nid).ifPresent(dv -> connectorTypeDescription = dv.getText());
 		if (RequestInfo.get().shouldExpand(ExpandUtil.versionExpandable))
 		{
 			ConceptChronology cc = Get.conceptService().getConceptChronology(connectorTypeConcept.nid);
 			LatestVersion<ConceptVersion> olcv = cc.getLatestVersion(coordForRead.getStampCoordinate());
 			// TODO handle contradictions
-			connectorTypeConceptVersion = new RestConceptVersion(olcv.get(), true, RequestInfo.get().shouldExpand(ExpandUtil.includeParents),
+			
+			if (olcv.isAbsent() && Frills.isMetadata(cc.getNid()))
+			{
+				LOG.info("Using latest version stamp to read metadata connector type concept");
+				//Use latest for metadata, cause its often newer, but we pretty much always need it in the graph refs.
+				StampCoordinate tweakedCoord = coordForRead.makeCoordinateAnalog(Long.MAX_VALUE);
+				olcv = cc.getLatestVersion(tweakedCoord);
+				
+				//If the concept wasn't present, the description will be bad too.
+				Get.conceptService().getSnapshot(new ManifoldCoordinateImpl(tweakedCoord, coordForRead.getLanguageCoordinate()))
+					.getDescriptionOptional(connectorTypeConcept.nid).ifPresent(dv -> connectorTypeDescription = dv.getDescriptionType())
+					.ifAbsent(() -> connectorTypeDescription = Util.readBestDescription(connectorTypeConcept.nid));
+
+			}
+			
+			if (olcv.isPresent())
+			{
+				connectorTypeConceptVersion = new RestConceptVersion(olcv.get(), true, RequestInfo.get().shouldExpand(ExpandUtil.includeParents),
 					RequestInfo.get().shouldExpand(ExpandUtil.countParents),
 					false, false, RequestInfo.get().getStated(), false, RequestInfo.get().shouldExpand(ExpandUtil.terminologyType), false);
+			}
+			else
+			{
+				LOG.info("No version of connector {} present at {} coordinate", cc, coordForRead);
+				connectorTypeConceptVersion = null;
+			}
 		}
 		else
 		{

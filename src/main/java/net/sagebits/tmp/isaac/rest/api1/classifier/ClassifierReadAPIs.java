@@ -96,13 +96,15 @@ public class ClassifierReadAPIs
 		{
 			throw new RestException("id", id, "No data was located for the specified classifier run");
 		}
-		return new RestClassifierResult(cr, !Boolean.parseBoolean(largeResults.trim()));
+		return new RestClassifierResult(cr, !Boolean.parseBoolean(largeResults.trim()), false);
 	}
 	
 	/**
 	 * Get the current information on all known classifier runs, ordered from most recently run to oldest run
 	 * @param largeResults - If false, or unspecified, all parts of the result that return lists or arrays will be limited to 100.  
 	 *     To include all details,set this to true.
+	 * @param skipResults - If false, or unspecified, has no impact.  If true, largeResults is ignored, and all parts of the result that return lists 
+	 *     or arrays will not be included at all.  This is useful for just retrieving the metadata for a run.  
 	 * @param coordToken specifies an explicit serialized CoordinatesToken string specifying all coordinate parameters. A CoordinatesToken may be
 	 *            obtained by a separate (prior) call to getCoordinatesToken().
 	 * @param altId - (optional) the altId type(s) to populate in any returned RestIdentifiedObject structures.  By default, no alternate IDs are 
@@ -114,7 +116,8 @@ public class ClassifierReadAPIs
 	@GET
 	@Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
 	@Path(RestPaths.classifications)
-	public RestClassifierResult[] readAll(@QueryParam(RequestParameters.largeResults) @DefaultValue("false") String largeResults,  
+	public RestClassifierResult[] readAll(@QueryParam(RequestParameters.largeResults) @DefaultValue("false") String largeResults,
+			@QueryParam(RequestParameters.skipResults) @DefaultValue("false") String skipResults,
 			@QueryParam(RequestParameters.coordToken) String coordToken,
 			@QueryParam(RequestParameters.altId) String altId) throws RestException
 	{
@@ -124,11 +127,12 @@ public class ClassifierReadAPIs
 		List<ClassifierResult> cr = ClassifierRunStorage.getClassificationResults();
 		Collections.sort(cr);
 		boolean limitResults = !Boolean.parseBoolean(largeResults.trim());
+		boolean skipResultsB = Boolean.parseBoolean(skipResults.trim());
 		
 		RestClassifierResult[] rcr = new RestClassifierResult[cr.size()];
 		for(int i = 0; i < rcr.length; i++)
 		{
-			rcr[i] = new RestClassifierResult(cr.get(i), limitResults);
+			rcr[i] = new RestClassifierResult(cr.get(i), limitResults, skipResultsB);
 		}
 		return rcr;
 	}

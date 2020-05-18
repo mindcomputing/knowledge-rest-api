@@ -84,7 +84,7 @@ public class TaxonomyAPIs
 	 * When Parents and Children are returned, the order of the parents and children is alphabetical, HOWEVER if there are a large number
 	 * of children - such that you only get back one page of children - only the returned page of children will be sorted. The sort will
 	 * NOT be correct across multiple pages. Each page will be sorted independently. If the end user needs to display all children, sorted,
-	 * they will have to fetch all pages, and then sort.
+	 * they must use the sortFull option, which reduces performance
 	 * 
 	 * @param id - A UUID or nid of a concept to center this taxonomy lookup on. If not provided, the default value
 	 *            is the UUID for the ISAAC_ROOT concept.
@@ -116,7 +116,7 @@ public class TaxonomyAPIs
 	 *     returned.  This can be set to one or more names or ids from the /1/id/types or the value 'ANY'.  Requesting IDs that are unneeded will harm 
 	 *     performance. 
 	 * @param sortFull - (optional) When set to true, calculate the entire result set, and sort it properly prior to paging.  This can significantly 
-	 *     increase the time it takes to calculate the results.  When fall (the default if not specified) each page of results that is returned is sorted,
+	 *     increase the time it takes to calculate the results.  When false (the default if not specified) each page of results that is returned is sorted,
 	 *     but only within that page.
 	 *     
 	 * @return the concept version object
@@ -249,45 +249,37 @@ public class TaxonomyAPIs
 		final int last = pageNum * maxPageSize;
 		final int[] totalChildrenNids = tree.getTaxonomyChildConceptNids(conceptNid);
 		List<RestConceptVersion> children = new ArrayList<>();
+		boolean scannedAll = true;
 		for (int childNid : totalChildrenNids)
 		{
-			childCount++;
-			if (childCount < first)
-			{
-				// Ignore unrequested pages prior to requested page
-				continue;
-			}
-			else if (childCount > last)
-			{
-				// Ignore unrequested pages subsequent to requested page
-				break;
-			}
-
 			ConceptChronology childConcept = null;
 			try
 			{
 				childConcept = ConceptAPIs.findConceptChronology(childNid + "");
-			}
-			catch (RestException e)
-			{
-				log.error("Failed finding concept for child concept SEQ=" + childNid + " of parent concept " + new RestIdentifiedObject(conceptNid)
-						+ ". Not including child.", e);
-				rcv.exceptionMessages
-						.add("Error adding child concept SEQ=" + childNid + " of parent concept SEQ=" + conceptNid + ": " + e.getLocalizedMessage());
-			}
-			if (childConcept != null)
-			{
 				try
 				{
+					//TODO some performance issues here, where the taxonomy call is doing getLatestVersion, and then we have to do it again here.
+					//want to do some benchmarking of adding caches into findConceptChronology, and getLatestVersion
 					LatestVersion<ConceptVersion> cv = childConcept.getLatestVersion(tree.getManifoldCoordinate().getDestinationStampCoordinate());
 					Util.logContradictions(log, cv);
 					if (cv.isPresent())
 					{
+						childCount++;
+						if (childCount < first)
+						{
+							// Ignore unrequested pages prior to requested page
+							continue;
+						}
+						else if (childCount > last)
+						{
+							// Ignore unrequested pages subsequent to requested page
+							scannedAll = false;
+							break;
+						}
 						// expand chronology of child even if unrequested, otherwise, you can't identify what the child is
 						// TODO handle contradictions
 						RestConceptVersion childVersion = new RestConceptVersion(cv.get(), true, populateParents, countParents, false, false,
-								tree.getManifoldCoordinate().getTaxonomyPremiseType() == PremiseType.STATED, 
-								includeSemanticMembership, includeTerminologyType, false);
+								includeSemanticMembership, includeTerminologyType, tree);
 						children.add(childVersion);
 						if (remainingChildDepth > 0)
 						{
@@ -306,17 +298,24 @@ public class TaxonomyAPIs
 				}
 				catch (RestException | RuntimeException e)
 				{
+					log.error("Error adding child concept " + childConcept.getPrimordialUuid() + " of parent concept SEQ=" + conceptNid, e);
 					rcv.exceptionMessages.add("Error adding child concept " + childConcept.getPrimordialUuid() + " of parent concept SEQ=" + conceptNid
 							+ ": " + e.getLocalizedMessage());
-					throw e;
 				}
+			}
+			catch (RestException e)
+			{
+				log.error("Failed finding concept for child concept SEQ=" + childNid + " of parent concept " + new RestIdentifiedObject(conceptNid)
+						+ ". Not including child.", e);
+				rcv.exceptionMessages
+						.add("Error adding child concept SEQ=" + childNid + " of parent concept SEQ=" + conceptNid + ": " + e.getLocalizedMessage());
 			}
 		}
 
 		final String baseUrl = RestPaths.taxonomyAPIsPathComponent + RestPaths.versionComponent + "?" + RequestParameters.id + "=" + conceptNid;
 
-		rcv.children = new RestConceptVersionPage(pageNum, maxPageSize, totalChildrenNids.length, true, (last - first) < totalChildrenNids.length, baseUrl,
-				children.toArray(new RestConceptVersion[children.size()]));
+		rcv.children = new RestConceptVersionPage(pageNum, maxPageSize, (scannedAll ? childCount : Math.max(childCount, totalChildrenNids.length)), 
+				scannedAll, !scannedAll, baseUrl, children.toArray(new RestConceptVersion[children.size()]));
 	}
 
 	public static void countParents(int conceptNid, RestConceptVersion rcv, TaxonomySnapshot tree)
@@ -382,8 +381,7 @@ public class TaxonomyAPIs
 							// expand chronology of the parent even if unrequested, otherwise, you can't identify what the child is
 							// TODO handle contradictions
 							RestConceptVersion parentVersion = new RestConceptVersion(cv.get(), true, false, false, false, false, 
-									tree.getManifoldCoordinate().getTaxonomyPremiseType() == PremiseType.STATED,
-									includeSemanticMembership, includeTerminologyType, false);
+									includeSemanticMembership, includeTerminologyType, tree);
 							rcv.addParent(parentVersion);
 							if (remainingParentDepth > 0)
 							{

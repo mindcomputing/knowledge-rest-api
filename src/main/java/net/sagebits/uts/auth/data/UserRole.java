@@ -48,11 +48,12 @@ public enum UserRole
 	
 	READ(SystemRoleConstants.READ, "Provides read access to terminology content.  Users with any role in the system will always have the read role, as well."),
 	EDITOR(SystemRoleConstants.EDITOR, "Editors can modify terminology, make comments, and submit edited content to the review queue.  Editors are also content " + 
-			"reviewers who can make comments on edits, reject them sending them back to the editor, or approve them."),
+			"reviewers who can make comments on edits, reject them sending them back to the editor, or approve them.", 0),
 	CONTENT_MANAGER(SystemRoleConstants.CONTENT_MANAGER, "The content manager has all of the permissions of editor.  In addition, the content " +
-			"manager can approve changes, run release validations, and perform full content releases."),
+			"manager can approve changes, run release validations, and perform full content releases.", 0, 1),
 	SYSTEM_MANAGER(SystemRoleConstants.SYSTEM_MANAGER, "The system manager has administrative control of the system allowing them to manage users and roles."),
-	ADMINISTRATOR(SystemRoleConstants.ADMINISTRATOR, "The system administrator has full access to the system, including logs, diagnostic data, and system configuration."), 
+	ADMINISTRATOR(SystemRoleConstants.ADMINISTRATOR, "The system administrator has full access to the system, including logs, diagnostic data, and system configuration.", 
+			0, 1, 2, 3), 
 	AUTOMATED(SystemRoleConstants.AUTOMATED, "This role cannot be assigned to users.  It exists for system to system access.");
 
 	/**
@@ -73,17 +74,20 @@ public enum UserRole
 
 	private String niceName;
 	private String roleDescription;
+	private int[] includesOtherRoles;  //set to the enum id of other values in this enum
 
-	private UserRole(String niceName, String roleDescription)
+	private UserRole(String niceName, String roleDescription, int ... includes)
 	{
 		this.niceName = niceName;
 		this.roleDescription = roleDescription;
+		this.includesOtherRoles = includes;
 	}
 
 
 	/**
 	 * @see java.lang.Enum#toString()
 	 */
+	@Override
 	public String toString()
 	{
 		return niceName;
@@ -104,6 +108,20 @@ public enum UserRole
 	public String getRoleDescription()
 	{
 		return this.roleDescription;
+	}
+	
+	/**
+	 * If a user is assigned this role, what other roles must also be assigned
+	 * @return
+	 */
+	public UserRole[] includesRoles()
+	{
+		UserRole[] result = new UserRole[includesOtherRoles.length];
+		for (int i = 0; i < result.length; i++)
+		{
+			result[i] = UserRole.values()[includesOtherRoles[i]];
+		}
+		return result;
 	}
 
 	/**

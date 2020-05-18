@@ -19,7 +19,8 @@ import javax.xml.bind.annotation.XmlElement;
 import javax.xml.bind.annotation.XmlRootElement;
 import com.fasterxml.jackson.annotation.JsonAutoDetect;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
-import net.sagebits.tmp.isaac.rest.api1.data.RestIdentifiedObject;
+import net.sagebits.tmp.isaac.rest.api1.data.concept.RestConceptChronology;
+import sh.isaac.api.Get;
 
 /**
  * {@link RestClassifierCycle}
@@ -36,7 +37,7 @@ public class RestClassifierCycle
 	 * A concept that has a cycle in the taxonomy
 	 */
 	@XmlElement
-	private RestIdentifiedObject conceptWithCycle;
+	private RestConceptChronology conceptWithCycle;
 	
 	/**
 	 * The isA path(s) of concepts that forms the cycle(s) from the conceptWithCycle back to itself
@@ -55,7 +56,7 @@ public class RestClassifierCycle
 	 */
 	public RestClassifierCycle(ClassifierCycle cc)
 	{
-		conceptWithCycle = new RestIdentifiedObject(cc.conceptWithCycle);
+		conceptWithCycle = new RestConceptChronology(Get.concept(cc.conceptWithCycle), false, false, false);
 		cyclePaths = new RestClassifierCyclePath[cc.cyclePaths.size()];
 		
 		for (int i = 0; i < cc.cyclePaths.size(); i++)

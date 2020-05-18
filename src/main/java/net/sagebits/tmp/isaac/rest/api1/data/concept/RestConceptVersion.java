@@ -68,6 +68,7 @@ import sh.isaac.api.component.concept.ConceptVersion;
 import sh.isaac.api.component.semantic.SemanticChronology;
 import sh.isaac.api.component.semantic.version.LogicGraphVersion;
 import sh.isaac.api.coordinate.ManifoldCoordinate;
+import sh.isaac.api.coordinate.PremiseType;
 import sh.isaac.api.coordinate.StampCoordinate;
 import sh.isaac.api.externalizable.IsaacObjectType;
 import sh.isaac.model.coordinate.ManifoldCoordinateImpl;
@@ -202,7 +203,7 @@ public class RestConceptVersion implements Comparable<RestConceptVersion>
 	{
 		this(cv, includeChronology, false, false, false, false, false, false, false, true);
 	}
-
+	
 	/**
 	 * @param cv
 	 * @param includeChronology
@@ -220,15 +221,58 @@ public class RestConceptVersion implements Comparable<RestConceptVersion>
 	public RestConceptVersion(ConceptVersion cv, boolean includeChronology, boolean includeParents, boolean countParents, boolean includeChildren,
 			boolean countChildren, boolean stated, boolean includeSemanticMembership, boolean includeTerminologyType, boolean useLatestStampForExpansion)
 	{
+		this(cv, includeChronology, includeParents, countParents, includeChildren, countChildren, stated, includeSemanticMembership, includeTerminologyType, 
+				useLatestStampForExpansion, null);
+	}
+	
+	/**
+	 * @param cv
+	 * @param includeChronology
+	 * @param includeParents
+	 * @param countParents
+	 * @param includeChildren
+	 * @param countChildren
+	 * @param includeSemanticMembership
+	 * @param includeTerminologyType
+	 * @param tree use this for tree expansions, and use the destination stamp for any calculation that requires a stamp
+	 * 
+	 */
+	public RestConceptVersion(ConceptVersion cv, boolean includeChronology, boolean includeParents, boolean countParents, boolean includeChildren,
+			boolean countChildren, boolean includeSemanticMembership, boolean includeTerminologyType, TaxonomySnapshot tree)
+	{
+		this(cv, includeChronology, includeParents, countParents, includeChildren, countChildren, false, includeSemanticMembership, includeTerminologyType, 
+				false, tree);
+	}
+
+	/**
+	 * @param cv
+	 * @param includeChronology
+	 * @param includeParents
+	 * @param countParents
+	 * @param includeChildren
+	 * @param countChildren
+	 * @param stated - ignored when tree provided - false for inferred
+	 * @param includeSemanticMembership
+	 * @param includeTerminologyType
+	 * @param useLatestStampForExpansion - ignored when tree provided - true, to use the latest stamp from the request info when populating expansions.  False, to use a stamp
+	 *     which is constructed from the fields of the provided sv (this is normally what should be used when populating a list of all versions, so 
+	 *     that the expanded items match the point in time from the version being populated
+	 * @param tree use this for tree expansions, and use the destination stamp for any calculation that requires a stamp
+	 */
+	private RestConceptVersion(ConceptVersion cv, boolean includeChronology, boolean includeParents, boolean countParents, boolean includeChildren,
+			boolean countChildren, boolean stated, boolean includeSemanticMembership, boolean includeTerminologyType, boolean useLatestStampForExpansion,
+			TaxonomySnapshot tree)
+	{
 		conVersion = new RestStampedVersion(cv);
 
 		Optional<SemanticChronology> semantic = Get.assemblageService()
 				.getSemanticChronologyStreamForComponentFromAssemblage(cv.getNid(),
-						(RequestInfo.get().getStated() ? RequestInfo.get().getLogicCoordinate().getStatedAssemblageNid()
+						((tree != null ? tree.getManifoldCoordinate().getTaxonomyPremiseType() == PremiseType.STATED : stated)
+							? RequestInfo.get().getLogicCoordinate().getStatedAssemblageNid()
 								: RequestInfo.get().getLogicCoordinate().getInferredAssemblageNid()))
 				.findAny();
 		
-		StampCoordinate stampToUse = computeVersionStamp(cv, useLatestStampForExpansion);
+		StampCoordinate stampToUse = tree == null ? computeVersionStamp(cv, useLatestStampForExpansion) : tree.getManifoldCoordinate().getDestinationStampCoordinate();
 
 		if (semantic.isPresent())
 		{
@@ -329,13 +373,20 @@ public class RestConceptVersion implements Comparable<RestConceptVersion>
 					expandables.add(new Expandable(ExpandUtil.chronologyExpandable, RestPaths.conceptChronologyAppPathComponent + cv.getChronology().getNid()));
 				}
 			}
-			TaxonomySnapshot tree = null;
+			TaxonomySnapshot treeInternal = null;
 			if (includeParents || includeChildren || countChildren || countParents)
 			{
 				try
 				{
-					ManifoldCoordinate coordForRead = RequestInfo.get().getManifoldCoordinate(stated);
-					tree = Get.taxonomyService().getSnapshotNoTree(new ManifoldCoordinateImpl(stampToUse, coordForRead.getLanguageCoordinate()));
+					if (tree == null)
+					{
+						ManifoldCoordinate coordForRead = RequestInfo.get().getManifoldCoordinate(stated);
+						treeInternal = Get.taxonomyService().getSnapshotNoTree(new ManifoldCoordinateImpl(stampToUse, coordForRead.getLanguageCoordinate()));
+					}
+					else
+					{
+						treeInternal = tree;
+					}
 				}
 				catch (RuntimeException e)
 				{
@@ -346,19 +397,19 @@ public class RestConceptVersion implements Comparable<RestConceptVersion>
 
 			if (includeParents)
 			{
-				TaxonomyAPIs.addParents(cv.getChronology().getNid(), this, tree, countParents, 0, includeSemanticMembership, includeTerminologyType,
+				TaxonomyAPIs.addParents(cv.getChronology().getNid(), this, treeInternal, countParents, 0, includeSemanticMembership, includeTerminologyType,
 						new NidSet());
 			}
 			else if (countParents)
 			{
-				TaxonomyAPIs.countParents(cv.getChronology().getNid(), this, tree);
+				TaxonomyAPIs.countParents(cv.getChronology().getNid(), this, treeInternal);
 			}
 
 			if (includeChildren)
 			{
 				try
 				{
-					TaxonomyAPIs.addChildren(cv.getChronology().getNid(), this, tree, countChildren, includeParents, countParents, 0, includeSemanticMembership,
+					TaxonomyAPIs.addChildren(cv.getChronology().getNid(), this, treeInternal, countChildren, includeParents, countParents, 0, includeSemanticMembership,
 							includeTerminologyType, new NidSet(), TaxonomyAPIs.PAGE_NUM_DEFAULT, TaxonomyAPIs.MAX_PAGE_SIZE_DEFAULT);
 				}
 				catch (RestException e)
@@ -369,7 +420,7 @@ public class RestConceptVersion implements Comparable<RestConceptVersion>
 			}
 			else if (countChildren)
 			{
-				TaxonomyAPIs.countChildren(cv.getChronology().getNid(), this, tree);
+				TaxonomyAPIs.countChildren(cv.getChronology().getNid(), this, treeInternal);
 			}
 
 			if (includeParents || includeChildren)

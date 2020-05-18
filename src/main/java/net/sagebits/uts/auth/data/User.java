@@ -42,6 +42,7 @@ import java.util.UUID;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import net.sagebits.uts.auth.users.UserService;
 import sh.isaac.api.util.PasswordHasher;
 
 /**
@@ -55,6 +56,7 @@ public class User implements Serializable
 	private static final long serialVersionUID = 1L;
 	private static Logger log = LogManager.getLogger(User.class);
 	public static final UUID GLOBAL = UUID.nameUUIDFromBytes("GLOBAL".getBytes());
+	public static final UUID ANON_READ_ID = UUID.fromString("aacbf0da-eeb9-4c37-8f49-f61918b67ead");  //Random UUID
 	
 	private final UUID id_;
 	private String userName_;
@@ -63,12 +65,18 @@ public class User implements Serializable
 	private final HashMap<UUID, Set<UserRole>> roles_ = new HashMap<>();
 	private boolean enable_ = true;
 	private String encryptedLocalPassword_;  //If the user is using local auth, this will be their local password
+	private String encryptedServiceToken_;  //An optional token a user can assign to an account.  This is meant for service-to-service auth.
+	private boolean initialPWChanged_= false;  
+	private boolean licenseAccepted_ = false;
+	private int logOutCount_ = 0;  //Used in the SSO tokens, to invalidate old tokens upon logout
+	
+	private transient UserService us_;
 	
 	/**
 	 * Create a new user
 	 * @param id - required
-	 * @param userName - required
-	 * @param displayName - recommended
+	 * @param userName - recommended, email has to be set if this isn't
+	 * @param displayName - required
 	 * @param globalRoles - optional
 	 * @param dbRoles - optional
 	 */
@@ -85,7 +93,7 @@ public class User implements Serializable
 				globals.add(role);
 			}
 		}
-		roles_.put(GLOBAL, globals);
+		roles_.put(GLOBAL, fixRoleChains(globals));
 		
 		if (dbRoles != null)
 		{
@@ -93,13 +101,37 @@ public class User implements Serializable
 			{
 				HashSet<UserRole> temp = new HashSet<>(dbRoleSet.getValue().length);
 				temp.addAll(Arrays.asList(dbRoleSet.getValue()));
-				roles_.put(dbRoleSet.getKey(), temp);
+				roles_.put(dbRoleSet.getKey(), fixRoleChains(temp));
 			}
 		}
 	}
 
 	/**
+	 * Ensure that if a role like editor is granted, any roles it depends on it also granted
+	 * @param temp
 	 * @return
+	 */
+	private Set<UserRole> fixRoleChains(HashSet<UserRole> temp)
+	{
+		for (UserRole ur : UserRole.values())
+		{
+			if (temp.contains(ur))
+			{
+				for (UserRole dependsOn: ur.includesRoles())
+				{
+					if (!temp.contains(dependsOn))
+					{
+						log.info("Adding dependent role {} because required by {}", dependsOn, ur);
+						temp.add(dependsOn);
+					}
+				}
+			}
+		}
+		return temp;
+	}
+
+	/**
+	 * @return the username
 	 */
 	public String getUserName()
 	{
@@ -107,8 +139,7 @@ public class User implements Serializable
 	}
 	
 	/**
-	 * The user specified name for display
-	 * @return
+	 * @return The user specified name for display
 	 */
 	public String getDisplayName()
 	{
@@ -124,7 +155,7 @@ public class User implements Serializable
 	}
 	
 	/**
-	 * @return
+	 * @return the email address
 	 */
 	public String getEmail()
 	{
@@ -132,7 +163,7 @@ public class User implements Serializable
 	}
 	
 	/**
-	 * @return
+	 * @return account status
 	 */
 	public boolean isEnabled()
 	{
@@ -158,8 +189,7 @@ public class User implements Serializable
 	}
 	
 	/**
-	 * @param dbId the UUID of the database to request role info on
-	 * @return the additional roles, if any that apply to the specified DB
+	 * @return the roles map that specifies roles for each DB, not including the global roles.  Returned as an unmodifiyable copy
 	 */
 	public Map<UUID, Set<UserRole>> getDBRoles()
 	{
@@ -216,7 +246,9 @@ public class User implements Serializable
 	@Override
 	public String toString()
 	{
-		return "User [userName=" + userName_ + ", id=" + id_ + ", Roles=" + rolesToString().toString() + ", displayName=" + displayName_ + ", enable=" + enable_ + "]";
+		return "User [userName=" + userName_ + ", email=" + email_+ ", id=" + id_ + ", Roles=" + rolesToString().toString() + ", displayName=" + displayName_ + ", enable=" + enable_ + 
+				" serviceTokenAssigned? " + hasServiceToken() + " initialPasswordChanged=" + initialPWChanged_ + " licenseAccepted=" + licenseAccepted_ +
+				" logOutCount=" + logOutCount_ + "]";
 	}
 	
 	private StringBuilder rolesToString()
@@ -246,7 +278,7 @@ public class User implements Serializable
 	 */
 	public String getSSOToken()
 	{
-		return new SSOToken(id_).getSerialized();
+		return new SSOToken(id_, logOutCount_).getSerialized();
 	}
 	
 	/**
@@ -271,12 +303,15 @@ public class User implements Serializable
 	}
 	
 	/**
-	 * Returns true, if the password is correct
 	 * @param passwordToTest
-	 * @return
+	 * @return true, if the password is correct
 	 */
 	public boolean validatePassword(char[] passwordToTest)
 	{
+		if (us_ == null)
+		{
+			throw new RuntimeException("UserStore ref not set prior to validate Password attempt");
+		}
 		if (!isEnabled())
 		{
 			log.info("Preventing disabled user authentication attempt");
@@ -284,11 +319,21 @@ public class User implements Serializable
 		}
 		if (StringUtils.isBlank(encryptedLocalPassword_))
 		{
+			us_.userAuthFailed(id_);
 			return false;
 		}
 		try
 		{
-			return PasswordHasher.check(passwordToTest, encryptedLocalPassword_);
+			if (PasswordHasher.check(passwordToTest, encryptedLocalPassword_))
+			{
+				us_.userAuthSuccess(id_);
+				return true;
+			}
+			else
+			{
+				us_.userAuthFailed(id_);
+				return false;
+			}
 		}
 		catch (Exception e)
 		{
@@ -321,6 +366,7 @@ public class User implements Serializable
 		userName_ = userName;
 	}
 	
+	@Override
 	public User clone()
 	{
 		User u = new User(id_, userName_, displayName_, getGlobalRoles().toArray(new UserRole[] {}), null);
@@ -332,13 +378,17 @@ public class User implements Serializable
 		u.encryptedLocalPassword_ = encryptedLocalPassword_;
 		u.email_ = email_;
 		u.enable_ = enable_;
+		u.encryptedServiceToken_ = encryptedServiceToken_;
+		u.initialPWChanged_ = initialPWChanged_;
+		u.licenseAccepted_ = licenseAccepted_;
+		u.logOutCount_ = logOutCount_;
+		u.us_ = us_;
 		
 		return u;
 	}
 
 	/**
 	 * @param dbId the dbId to remove roles for
-	 * @param fromString
 	 */
 	public void removeDBRoles(UUID dbId)
 	{
@@ -351,6 +401,129 @@ public class User implements Serializable
 	 */
 	public void setDBRoles(UUID projectId, HashSet<UserRole> newRoles)
 	{
-		roles_.put(projectId, newRoles);
+		roles_.put(projectId, fixRoleChains(newRoles));
+	}
+	
+	/**
+	 * Create a new service token for this account (replacing / invalidating any existing token)
+	 * @return The newly assigned serviceToken.
+	 */
+	public String assignServiceToken()
+	{
+		UUID serviceToken = UUID.randomUUID();
+		try
+		{
+			encryptedServiceToken_ = PasswordHasher.getSaltedHash(serviceToken.toString().toCharArray());
+			return serviceToken.toString();
+		}
+		catch (Exception e)
+		{
+			log.error("Unexpected error encrypting service token", e);
+			throw new RuntimeException(e);
+		}
+	}
+	
+	/**
+	 * Set a service token for this account (replacing / invalidating any existing token).
+	 * This is intended for internal use, you should use  {@link #assignServiceToken}
+	 * @param tokenValue the unencrypted tokenValue
+	 */
+	public void setServiceToken(char[] tokenValue)
+	{
+		try
+		{
+			encryptedServiceToken_ = (tokenValue == null || tokenValue.length == 0 ? null : PasswordHasher.getSaltedHash(tokenValue));
+		}
+		catch (Exception e)
+		{
+			log.error("Unexpected error encrypting service token", e);
+			throw new RuntimeException(e);
+		}
+	}
+	
+	/**
+	 * Call this to invalidate all existing SSO tokens
+	 */
+	public void logout()
+	{
+		log.debug("All tokens invalidated for {} - {}", getUserName(), getId());
+		logOutCount_++;
+	}
+	
+	public int getLogoutCount()
+	{
+		return logOutCount_;
+	}
+	
+	/**
+	 * Remove the service token from this account, leaving it so that you cannot login with a service token
+	 */
+	public void removeServiceToken()
+	{
+		encryptedServiceToken_ = null;
+	}
+	
+	/**
+	 * @return true, if there exists a service token that can be used to access this account.  false otherwise.
+	 */
+	public boolean hasServiceToken()
+	{
+		return StringUtils.isNotBlank(encryptedServiceToken_);
+	}
+	
+	/**
+	 * Validate the passed in service token.
+	 * @param serviceToken the token to check
+	 * @return true if valid, false otherwise.
+	 */
+	public boolean validateServiceToken(String serviceToken)
+	{
+		if (!isEnabled())
+		{
+			log.info("Preventing disabled user authentication attempt");
+			return false;
+		}
+		if (StringUtils.isBlank(encryptedServiceToken_))
+		{
+			return false;
+		}
+		try
+		{
+			return PasswordHasher.check(serviceToken.toCharArray(), encryptedServiceToken_);
+		}
+		catch (Exception e)
+		{
+			log.error("Unexpected error checking service token", e);
+			throw new RuntimeException(e);
+		}
+	}
+	
+	public void setLicenseAccepted()
+	{
+		licenseAccepted_ = true;
+	}
+	
+	public boolean isLicenseAccepted()
+	{
+		return licenseAccepted_;
+	}
+	
+	public boolean isInitialPasswordChanged()
+	{
+		return initialPWChanged_;
+	}
+	
+	/**
+	 * For UserService use only
+	 * @param us
+	 */
+	public void setUserService(UserService us)
+	{
+		us_ = us;
+	}
+
+	public void initialPasswordChanged(boolean b)
+	{
+		initialPWChanged_ = b;
 	}
 }

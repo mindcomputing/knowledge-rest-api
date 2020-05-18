@@ -124,7 +124,7 @@ public class RestDynamicSemanticColumnInfo
 
 	public RestDynamicSemanticColumnInfo(DynamicColumnInfo dsci)
 	{
-		// TODO Dynamic Semantic Column Info is not computed with the passed view coordinate, therefore, the descriptions are not correct.
+		// TODO Dynamic Semantic Column Info is not computed with the passed view coordinate, therefore, the column name and column description are not correct.
 		// Need to fix...
 		this.columnLabelConcept = new RestIdentifiedObject(dsci.getColumnDescriptionConcept());
 		this.columnDataType = new RestDynamicSemanticDataType(dsci.getColumnDataType());

@@ -34,6 +34,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import org.jvnet.hk2.annotations.Contract;
@@ -54,9 +55,9 @@ import sh.isaac.api.component.concept.ConceptSpecification;
 import sh.isaac.api.coordinate.EditCoordinate;
 import sh.isaac.api.coordinate.LanguageCoordinate;
 import sh.isaac.api.coordinate.LogicCoordinate;
-import sh.isaac.model.configuration.EditCoordinates;
 import sh.isaac.model.configuration.LanguageCoordinates;
 import sh.isaac.model.configuration.LogicCoordinates;
+import sh.isaac.model.coordinate.EditCoordinateImpl;
 import sh.isaac.model.logic.LogicalExpressionImpl;
 import sh.isaac.model.logic.node.NecessarySetNode;
 import sh.isaac.model.logic.node.external.ConceptNodeWithUuids;
@@ -78,10 +79,11 @@ public interface RestUserService
 	 * 
 	 * @param requestParameters - all parameters passed in with the request, this service will filter for the ones it cares about.
 	 * @param editToken - optional - if provided, user will be loaded from the edit token, or sanity checked against it.
+	 * @param cookieValueProvider - will provide the value for a named cookie (if cookie is present)
 	 * @return the user and roles available to the user
 	 * @throws RestException  if the provided parameters are invalid
 	 */
-	public Optional<RestUser> getUser(Map<String, List<String>> requestParameters, EditToken editToken) throws RestException;
+	public Optional<RestUser> getUser(Map<String, List<String>> requestParameters, EditToken editToken, Function<String, Optional<String>> cookieValueProvider) throws RestException;
 	
 	/**
 	 * Get the concept nid that corresponds to a given editors user name - constructing the concept if necessary.
@@ -100,7 +102,11 @@ public interface RestUserService
 		else
 		{
 			log.debug("Creating new concept for user '" + user.userId + "'");
-			EditCoordinate adminEditCoordinate = EditCoordinates.getDefaultUserMetadata();
+			//TODO remove the hasConcept check, after we have rebuilt all the DBs with the new users module
+			EditCoordinate adminEditCoordinate = new EditCoordinateImpl(MetaData.USER____SOLOR.getNid(), 
+					Get.conceptService().hasConcept(MetaData.USERS_MODULE____SOLOR.getNid()) ? 
+						MetaData.USERS_MODULE____SOLOR.getNid() : MetaData.METADATA_MODULES____SOLOR.getNid(),
+					MetaData.DEVELOPMENT_PATH____SOLOR.getNid());
 			LanguageCoordinate languageCoordinate = LanguageCoordinates.getUsEnglishLanguageFullySpecifiedNameCoordinate();
 			LogicCoordinate logicCoordinate = LogicCoordinates.getStandardElProfile();
 
@@ -116,7 +122,7 @@ public interface RestUserService
 			NecessarySetNode nsn = parentDef.NecessarySet(parentDef.And(new ConceptNodeWithUuids(parentDef.Concept(MetaData.USER____SOLOR))));
 			parentDef.getRoot().addChildren(nsn);
 
-			ConceptBuilder builder = conceptBuilderService.getDefaultConceptBuilder(user.userName, null, parentDef,
+			ConceptBuilder builder = conceptBuilderService.getDefaultConceptBuilder(user.displayName, null, parentDef,
 					MetaData.SOLOR_CONCEPT_ASSEMBLAGE____SOLOR.getAssemblageNid());
 
 			// Set new author concept UUID to SSO UUID
@@ -136,7 +142,7 @@ public interface RestUserService
 			try
 			{
 				CommitRecord commitRecord = Util.commitCheck(
-						Get.commitService().commit(adminEditCoordinate, "creating new concept: NID=" + newCon.getNid() + ", FQN=" + user.userName));
+						Get.commitService().commit(adminEditCoordinate, "creating new concept: NID=" + newCon.getNid() + ", FQN=" + user.displayName));
 				log.debug("commit {}", commitRecord);
 				return newCon.getNid();
 			}
@@ -146,4 +152,9 @@ public interface RestUserService
 			}
 		}
 	}
+	
+	/**
+	 * Clear any cached data
+	 */
+	public void clearCache();
 }
