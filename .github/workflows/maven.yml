@@ -16,11 +16,11 @@ jobs:
     steps:
     - uses: actions/checkout@v2
       with:
-        repository: 'https://github.com/mindcomputing/knowledge-core.git'
+        repository: 'mindcomputing/knowledge-core'
         ref: 'develop'
         path: 'core'
     - uses: actions/checkout@v2
-      with: 
+      with:
         path: 'rest'
     - name: Set up JDK 11
       uses: actions/setup-java@v1
@@ -28,9 +28,10 @@ jobs:
         java-version: 11
         server-id: github # Value of the distributionManagement/repository/id field of the pom.xml
         settings-path: ${{ github.workspace }}
-    - name: Build with Maven
-      run: mvn -B install --file core/pom.xml
-      run: mvn -B package --file rest/pom.xml
+    - name: Build core with Maven
+      run: mvn -X -B install --file core/pom.xml
+    - name: Build rest with Maven
+      run: mvn -X -B package --file rest/pom.xml
       
       env:
         GITHUB_TOKEN: ${{ github.token }}
