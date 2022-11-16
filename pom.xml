@@ -54,7 +54,7 @@
 			<dependency>
 				<groupId>com.fasterxml.jackson.core</groupId>
 				<artifactId>jackson-databind</artifactId>
-				<version>2.9.9</version>  <!-- We need to lock this to the version that jersey-media-json-jackson expects, rather than the version isaac tries to give us.-->
+				<version>2.12.7.1</version>  <!-- We need to lock this to the version that jersey-media-json-jackson expects, rather than the version isaac tries to give us.-->
 			</dependency>
 		</dependencies>
 	</dependencyManagement>
