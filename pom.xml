@@ -273,7 +273,7 @@
 		<dependency>
 			<groupId>org.testng</groupId>
 			<artifactId>testng</artifactId>
-			<version>6.14.3</version><!-- TODO upgrade to 7, which upstream uses - some bug at the moment.  --> 
+			<version>7.5.1</version><!-- TODO upgrade to 7, which upstream uses - some bug at the moment.  --> 
 			<scope>test</scope>
 		</dependency>
 
